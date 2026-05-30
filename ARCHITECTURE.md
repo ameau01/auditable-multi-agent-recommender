@@ -69,7 +69,7 @@ flowchart TB
     RP --> H
 ```
 
-Every arrow crosses one or more harnesses — the next section describes them.
+Every arrow crosses one or more harnesses — the next section describes them. Note that this is a logical topology, not a microservice deployment diagram. For this portfolio implementation, the system runs as a single Python process; the architectural boundaries are strictly logical, not infrastructural.
 
 ## The Four Harnesses
 
@@ -135,7 +135,7 @@ flowchart TB
     AH -.-> PAR
     HITL -.-> PAR
 ```
-A review initiates with a lightweight trigger naming the target app and an optional alert description. The Supervisor pulls the initial package to plan the review, then specialists pull their tier's telemetry through the MCP surface as they reason. The Persistent Action Record captures state at every transition. The full reasoning chain, from trigger to final synthesis, can be reconstructed from the audit trail.
+A review initiates with a lightweight trigger naming the target app and an optional alert description. The Supervisor pulls the initial package to plan the review, then specialists pull their tier's telemetry through the MCP surface as they reason. The Persistent Action Record captures state at every transition. The full reasoning chain, from trigger to final synthesis, can be reconstructed from the audit trail. Note that this diagram describes the conceptual reasoning structure, not a strict state-machine specification. Frameworks like LangGraph handle the actual control flow and state transitions underneath.
 
 ## Tier Specialist: the ReAct loop
 
@@ -183,9 +183,9 @@ flowchart TB
     %% Execution Flow
     IN --> S1 --> S2 --> S3 --> OUT
 ```
-**Drift-check first, then synthesize** A contradictory or weakly bound specialist finding must not pollute cross-tier reasoning. It is isolated and flagged before the synthesis layer can combine it with the other findings.
 
-**Correlated multi-specialist drift** A failure mode where all three specialists confidently hallucinate in the same direction is not caught by the Evaluator. By design, this edge case is structurally delegated to the Human-in-the-Loop (HITL) review. The persistent audit trail provides the trace the reviewer needs to adjudicate the correlated failure. See [docs/harnesses.md](docs/harnesses.md).
+**Evaluator Logic:** The Evaluator follows a strict three-step sequence—enforcing drift-checks *before* mapping cross-tier interactions—to prevent hallucinated findings from polluting the final synthesis. The specific mechanics of this sequence, and the edge cases it explicitly delegates to human-in-the-loop (HITL), are detailed in [docs/agents.md (Cross-Tier Evaluator)](docs/agents.md).
+
 
 ## Where Each Harness Applies
 
@@ -200,13 +200,3 @@ flowchart TB
 | **HITL Decision** | - | - | - | Logs human approval, rejection, or deferral |
 
 The Reasoning Harness carries the heaviest cognitive load. The Action Harness remains intentionally narrow. The Persistent Action Record maintains state across the entire lifecycle. The Input Harness acts strictly as the front door.
-
-## What This Architecture Is Not
-
-**Not a microservice deployment diagram** The system runs as a single Python process for the portfolio implementation. The architectural boundaries are logical, not infrastructural.
-
-**Not a state-machine specification** LangGraph (or an equivalent framework) handles the strict control flow. The diagrams above describe the conceptual reasoning structure, not the exact state transitions.
-
-**The Supervisor is not a simple router** It makes active workflow decisions: which specialists to invoke based on the analysis plan, when to retry a specialist on low confidence, and when to defer to a human reviewer.
-
-**The Cross-Tier Evaluator is not a winner-picker** When specialist findings conflict, the Evaluator does not silently discard one side. Instead, it explicitly surfaces the tension, maps the dependencies, and scores the trade-offs for the reviewer.
