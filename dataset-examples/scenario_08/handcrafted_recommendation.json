@@ -1,0 +1,55 @@
+{
+  "scenario_id": "08",
+  "finding_type": "issue_found",
+  "specific_change": "Optimize the top 6 slowest SQL queries and add 2 read replicas with read/write splitting. Specifically: (1) Add a composite index (user_id, id) on carts and (cart_id) on cart_items for the carts-by-user query (p95 820ms, 6.05M calls); (2) Add a composite index (warehouse_id, product_id) on inventory for the inventory-warehouse query (p95 680ms, 3.53M calls); (3) Add a composite index (product_id, region, valid_from, valid_to, priority) on pricing for the pricing-lookup query (p95 580ms, 4.03M calls); (4) Add an index (country, is_active, priority) on payment_providers for the payment-provider query (p95 440ms, 1.34M calls); (5) Add a composite index (user_id, created_at DESC) on orders and (order_id) on order_items for the orders-by-user query (p95 510ms, 504K calls); (6) Add an index (order_id, status) on fulfillment for the fulfillment-status query (p95 380ms, 672K calls). Provision 2 read replicas (db.r6g.xlarge) and enable R/W splitting to route all SELECT traffic to replicas. Do NOT scale compute \u2014 the ASG at 8\u00d7 m5.large is correctly sized.",
+  "primary_tier": "database",
+  "secondary_tier": "compute",
+  "action_category": "query_cache_optimization",
+  "conclusion": {
+    "finding_type": "issue_found",
+    "primary_tier": "database",
+    "secondary_tier": "compute",
+    "action_category": "query_cache_optimization",
+    "headline": "Optimize 6 slow queries + add 2 read replicas to fix SLA breach (~$650 p95ms\u2192<220ms)"
+  },
+  "evidence": {
+    "telemetry_observations": [
+      "application_p95_latency_ms p95 is 659.8ms, far exceeding the 300ms SLA target.",
+      "db_query_p95_latency_ms p95 is 791.2ms with max 819.8ms during business hours.",
+      "Compute CPU p95 is 71.8% max, memory p95 is 64.4% \u2014 both within healthy bounds.",
+      "db_io_wait_p95 spikes to 28ms (p95: 27.3ms), indicating storage pressure from unoptimized queries.",
+      "db_connections_p95 reaches 80, suggesting high concurrent query load during peaks.",
+      "application_p95_latency_ms stddev of 215ms indicates severe bimodal behavior (off-peak vs business hours)."
+    ],
+    "infrastructure_context": [
+      "Database is db.r6g.xlarge with only 1 replica and no R/W splitting configured.",
+      "Compute ASG is 8\u00d7 m5.large (min 8, max 12) with target-tracking \u2014 correctly sized for current CPU/memory.",
+      "Terraform shows no read replica resource defined, all traffic hits the primary.",
+      "No cache tier is deployed \u2014 all reads go directly to the database."
+    ],
+    "correlation_observations": [
+      "db_query_p95_latency_ms \u2192 application_p95_latency_ms: Pearson r=0.945, lag=15min, alignment=0.979 across all 10 weekday business-hour windows."
+    ]
+  },
+  "reasoning": "The cross-tier correlation (r=0.945) conclusively shows that database query latency is the root cause of application latency SLA breaches. Compute resources are healthy (CPU p95 ~72%, memory ~64%), so scaling compute would waste money without addressing the bottleneck. The top 6 queries account for over 16M calls over 14 days with p95 latencies ranging from 380ms to 820ms \u2014 all lacking appropriate composite indexes based on their WHERE/JOIN/ORDER BY patterns. Adding 2 read replicas with R/W splitting will distribute the read-heavy checkout workload (all 6 queries are SELECTs) across 3 nodes instead of 1, while index optimization will reduce per-query execution time dramatically.",
+  "projected_state": {
+    "cpu_p95_pct_estimate": "68-72",
+    "memory_p95_pct_estimate": "50-65",
+    "latency_p95_ms_estimate": "180-240",
+    "sla_availability_preserved": true,
+    "notes": "Based on before/after evidence: query optimization + 2 replicas with R/W splitting reduced db_query_p95 from 450-820ms to <220ms and app_p95 from 580-720ms to 180-240ms, well within the 300ms SLA."
+  },
+  "cost_impact": {
+    "current_monthly_usd": 6400.0,
+    "projected_monthly_usd": 8800.0,
+    "savings_monthly_usd": -2400.0,
+    "savings_pct": -37.5,
+    "notes": "Adding 2 read replicas at db.r6g.xlarge adds ~$2,400/mo ($1,200/mo each based on current $2,200/mo for primary+1 replica \u2192 ~$1,100-1,200 per replica). This is a cost increase, not a savings, but it resolves an active SLA breach on a tier-1 checkout service. The alternative \u2014 continued SLA violations at 660ms p95 vs 300ms target \u2014 carries far greater business risk. Once queries are optimized and load stabilizes, evaluate downsizing to db.r6g.large replicas to recover ~$800/mo."
+  },
+  "risk_assessment": {
+    "primary_risk": "Replication lag on the 2 new read replicas could serve stale data for cart/inventory/pricing reads during high-write periods, causing checkout inconsistencies.",
+    "mitigation": "Monitor replica lag (target <100ms). Route write-after-read patterns (e.g., cart updates followed by cart reads) to the primary. Set up CloudWatch alarms on ReplicaLag > 500ms. Deploy index changes during a maintenance window (Sunday 04:00-06:00 UTC) to avoid lock contention on high-traffic tables.",
+    "rollback": "Revert R/W splitting at the application/proxy layer to route all traffic back to primary. Drop newly added indexes if they cause unexpected write amplification. Remove read replicas via Terraform to restore original cost baseline.",
+    "notes": "Index creation on tables with millions of rows should use CREATE INDEX CONCURRENTLY to avoid table locks. Test each index in staging first to validate query plan improvements."
+  }
+}

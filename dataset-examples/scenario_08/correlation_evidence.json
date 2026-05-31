@@ -1,0 +1,12 @@
+[
+  {
+    "tier_a": "database",
+    "tier_b": "compute",
+    "metric_a": "db_query_p95_latency_ms",
+    "metric_b": "application_p95_latency_ms",
+    "coefficient": 0.945,
+    "lag_minutes": 15,
+    "alignment_score": 0.979,
+    "description": "must hold on all 10 weekday dates during business hours"
+  }
+]

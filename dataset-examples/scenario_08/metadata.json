@@ -1,0 +1,101 @@
+{
+  "contract_version": "1.0.0",
+  "scenario_id": "08",
+  "scenario_name": "Database Bottleneck Impact",
+  "scenario_type": "cross_tier_negative",
+  "narrative": {
+    "what_this_demonstrates": "A database with slow queries during business hours that cascade into elevated application latency on the compute tier. Compute itself is correctly sized; the problem is downstream.\n",
+    "why_this_scenario_exists": "Tests cross-tier synthesis. The Compute Analyst will see latency elevated but compute capacity normal; the Data Layer Analyst will see slow queries; the Cross-Tier Evaluator must connect them and recommend query optimization rather than compute scaling.\n",
+    "what_the_agent_should_conclude": "Optimize the top 6 slowest SQL queries and add 2 read replicas with read/write splitting. Expected outcome: application_p95_latency_ms drops from ~650ms business-hours to under 220ms.\n",
+    "what_distinguishes_good_from_great": "A good recommendation identifies the database as the root cause. A great recommendation cites the specific top_queries fixture, pairs query optimization with replica scaling, and avoids recommending compute scaling (which would not fix the problem).\n"
+  },
+  "business_context": {
+    "description": "High-criticality checkout service",
+    "sla_target_description": "99.9% availability, P95 < 300ms",
+    "sla_target_p95_ms": 300,
+    "sla_target_availability_pct": 99.9,
+    "criticality": "tier-1"
+  },
+  "cost_baseline": {
+    "monthly_cost_total_usd": 6400.0,
+    "by_tier": {
+      "compute": 4200.0,
+      "database": 2200.0,
+      "cache": 0.0,
+      "network": 0.0
+    }
+  },
+  "tier_topology": {
+    "compute": {
+      "present": true,
+      "instance_class": "m5.large",
+      "instance_count": 8,
+      "scaling_policy": "target_tracking",
+      "auto_scaling_min": 8,
+      "auto_scaling_max": 12
+    },
+    "database": {
+      "present": true,
+      "instance_class": "db.r6g.xlarge",
+      "replicas": 1,
+      "storage_gb": 500
+    },
+    "cache": null,
+    "network": null
+  },
+  "scenario_specific_evidence": {
+    "top_queries": [
+      {
+        "query_text": "SELECT c.*, ci.* FROM carts c JOIN cart_items ci ON ci.cart_id = c.id WHERE c.user_id = ?",
+        "count": 6048000,
+        "p95_latency_ms": 820.0
+      },
+      {
+        "query_text": "SELECT i.*, p.* FROM inventory i JOIN products p ON p.id = i.product_id WHERE i.warehouse_id IN (...)",
+        "count": 3528000,
+        "p95_latency_ms": 680.0
+      },
+      {
+        "query_text": "SELECT * FROM pricing WHERE product_id = ? AND region = ? AND valid_from <= NOW() AND valid_to > NOW() ORDER BY priority DESC",
+        "count": 4032000,
+        "p95_latency_ms": 580.0
+      },
+      {
+        "query_text": "SELECT pp.* FROM payment_providers pp WHERE pp.country = ? AND pp.is_active = TRUE ORDER BY pp.priority",
+        "count": 1344000,
+        "p95_latency_ms": 440.0
+      },
+      {
+        "query_text": "SELECT o.*, oi.* FROM orders o JOIN order_items oi ON oi.order_id = o.id WHERE o.user_id = ? ORDER BY o.created_at DESC LIMIT 50",
+        "count": 504000,
+        "p95_latency_ms": 510.0
+      },
+      {
+        "query_text": "SELECT f.* FROM fulfillment f WHERE f.order_id = ? AND f.status IN ('pending','allocated')",
+        "count": 672000,
+        "p95_latency_ms": 380.0
+      }
+    ],
+    "top_cache_keys": [],
+    "per_instance_breakdown": []
+  },
+  "before_after_evidence": {
+    "config_before": "db.r6g.xlarge, 1 replica, no R/W splitting",
+    "config_after": "db.r6g.xlarge, 2 read replicas with R/W splitting, top 6 queries optimized",
+    "observed_outcome_summary": "db_query_p95_latency_ms during business hours dropped from 450–820ms to under 220ms, application_p95_latency_ms dropped from peak 580–720ms back to 180–240ms, SLA 99.9% preserved.\n",
+    "source_attribution": "Pattern observed across checkout-service cohort during Q4 2025."
+  },
+  "evaluation_properties": {
+    "exercises_restraint": false,
+    "exercises_diagnostic_deferral": false,
+    "exercises_cross_tier_synthesis": true,
+    "primary_specialist_under_test": "cross_tier_evaluator"
+  },
+  "telemetry_file_pointers": {
+    "compute": "compute_telemetry.json",
+    "database": "database_telemetry.json",
+    "cache": "cache_telemetry.json",
+    "network": "network_telemetry.json"
+  },
+  "infrastructure_file": "main.tf"
+}

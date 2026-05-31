@@ -1,0 +1,65 @@
+{
+  "contract_version": "1.0.0",
+  "scenario_id": "02",
+  "scenario_name": "Spiky Compute Load",
+  "scenario_type": "single_tier_negative",
+  "narrative": {
+    "what_this_demonstrates": "A fleet that sits at a healthy baseline most of the time but is catastrophically under-provisioned during two predictable daily spike windows on weekdays. The fleet is fixed-capacity; scheduled scaling would absorb the spikes without affecting baseline cost much.\n",
+    "why_this_scenario_exists": "Tests time-pattern recognition. The Compute Analyst must see beyond the baseline averages to the predictable spike windows, and recommend a scaling policy that targets those windows specifically — not a blanket capacity increase.\n",
+    "what_the_agent_should_conclude": "Implement predictive auto-scaling with scheduled capacity increases during 10–11 AM and 3–4 PM weekday windows. Expected outcome: p95 spikes drop below 65% while maintaining SLA and reducing baseline cost by 48%.\n",
+    "what_distinguishes_good_from_great": "A good recommendation says \"add auto-scaling.\" A great recommendation identifies the specific spike windows and proposes scheduled scaling rather than reactive scaling (which would lag the spikes).\n"
+  },
+  "business_context": {
+    "description": "High-criticality checkout service",
+    "sla_target_description": "99.9% availability, P95 < 300ms",
+    "sla_target_p95_ms": 300,
+    "sla_target_availability_pct": 99.9,
+    "criticality": "tier-1"
+  },
+  "cost_baseline": {
+    "monthly_cost_total_usd": 5200.0,
+    "by_tier": {
+      "compute": 5200.0,
+      "database": 0.0,
+      "cache": 0.0,
+      "network": 0.0
+    }
+  },
+  "tier_topology": {
+    "compute": {
+      "present": true,
+      "instance_class": "m5.large",
+      "instance_count": 6,
+      "scaling_policy": "none",
+      "auto_scaling_min": null,
+      "auto_scaling_max": null
+    },
+    "database": null,
+    "cache": null,
+    "network": null
+  },
+  "scenario_specific_evidence": {
+    "top_queries": [],
+    "top_cache_keys": [],
+    "per_instance_breakdown": []
+  },
+  "before_after_evidence": {
+    "config_before": "m5.large × 6 fixed capacity, no auto-scaling",
+    "config_after": "Predictive scheduled scaling 10–11 AM and 3–4 PM, baseline m5.large × 6",
+    "observed_outcome_summary": "p95 spikes dropped below 65%, SLA 99.9% maintained, baseline cost reduced 48% due to right-sized off-peak capacity.\n",
+    "source_attribution": "Pattern observed across checkout-service cohort during Q4 2025."
+  },
+  "evaluation_properties": {
+    "exercises_restraint": false,
+    "exercises_diagnostic_deferral": false,
+    "exercises_cross_tier_synthesis": false,
+    "primary_specialist_under_test": "compute_analyst"
+  },
+  "telemetry_file_pointers": {
+    "compute": "compute_telemetry.json",
+    "database": "database_telemetry.json",
+    "cache": "cache_telemetry.json",
+    "network": "network_telemetry.json"
+  },
+  "infrastructure_file": "main.tf"
+}

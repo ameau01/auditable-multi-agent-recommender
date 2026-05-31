@@ -1,0 +1,91 @@
+{
+  "contract_version": "1.0.0",
+  "scenario_id": "07",
+  "scenario_name": "Cache Miss Cascade",
+  "scenario_type": "cross_tier_negative",
+  "narrative": {
+    "what_this_demonstrates": "A cache tier that degrades (hit ratio drops below the healthy band) cascades into elevated database load and elevated application latency, even though the database and compute tiers themselves are correctly sized. The fix is in the cache layer, not in the downstream tiers — a sophisticated recommender must see past the symptoms to the cause.\n",
+    "why_this_scenario_exists": "Tests the Cross-Tier Evaluator's ability to identify a cause-effect chain across three tiers and resist the temptation to recommend scaling up the downstream tiers (database, compute) where the symptoms are loudest.\n",
+    "what_the_agent_should_conclude": "Increase cache cluster from 3 to 6 nodes, implement cache warming logic, and review cache key design for the top 3 most frequent keys. Expected outcome: cache_hit_ratio rises above 0.89, db_query_p95_latency drops by 30–40%, application_p95_latency_ms drops to under 280ms, SLA preserved.\n",
+    "what_distinguishes_good_from_great": "A \"good\" recommendation identifies the cache as the root cause. A \"great\" recommendation grounds the specific quantities (3→6 nodes, the top-3 cache keys to redesign) in the sidecar fixtures, and articulates the cost / performance / reliability trade-off explicitly rather than collapsing it.\n"
+  },
+  "business_context": {
+    "description": "High-criticality recommendation engine, customer-facing",
+    "sla_target_description": "99.9% availability, P95 < 300ms",
+    "sla_target_p95_ms": 300,
+    "sla_target_availability_pct": 99.9,
+    "criticality": "tier-1"
+  },
+  "cost_baseline": {
+    "monthly_cost_total_usd": 5800.0,
+    "by_tier": {
+      "compute": 3200.0,
+      "database": 1900.0,
+      "cache": 700.0,
+      "network": 0.0
+    }
+  },
+  "tier_topology": {
+    "compute": {
+      "present": true,
+      "instance_class": "m5.large",
+      "instance_count": 6,
+      "scaling_policy": "target_tracking",
+      "auto_scaling_min": 6,
+      "auto_scaling_max": 10
+    },
+    "database": {
+      "present": true,
+      "instance_class": "db.r6g.large",
+      "replicas": 2,
+      "storage_gb": 500
+    },
+    "cache": {
+      "present": true,
+      "node_type": "cache.r6g.large",
+      "node_count": 3,
+      "ttl_seconds": 3600
+    },
+    "network": null
+  },
+  "scenario_specific_evidence": {
+    "top_queries": [],
+    "top_cache_keys": [
+      {
+        "key_pattern": "rec:user:*",
+        "hit_count": 8200000,
+        "miss_count": 3100000
+      },
+      {
+        "key_pattern": "rec:trending:*",
+        "hit_count": 4400000,
+        "miss_count": 1900000
+      },
+      {
+        "key_pattern": "rec:similar:*",
+        "hit_count": 2800000,
+        "miss_count": 1700000
+      }
+    ],
+    "per_instance_breakdown": []
+  },
+  "before_after_evidence": {
+    "config_before": "3-node cache cluster, no warming, default key design",
+    "config_after": "6-node cluster + warming on top-3 keys + key redesign",
+    "observed_outcome_summary": "cache_hit_ratio rose from 0.65 to 0.91, db_query_p95_latency_ms dropped by 38%, application_p95_latency_ms returned to the 200–260ms band, SLA of 99.9% preserved.\n",
+    "source_attribution": "Pattern observed across recommendation-engine cohort during Q4 2025."
+  },
+  "evaluation_properties": {
+    "exercises_restraint": false,
+    "exercises_diagnostic_deferral": false,
+    "exercises_cross_tier_synthesis": true,
+    "primary_specialist_under_test": "cross_tier_evaluator"
+  },
+  "telemetry_file_pointers": {
+    "compute": "compute_telemetry.json",
+    "database": "database_telemetry.json",
+    "cache": "cache_telemetry.json",
+    "network": "network_telemetry.json"
+  },
+  "infrastructure_file": "main.tf"
+}

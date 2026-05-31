@@ -14,6 +14,6 @@
   ],
   "short_circuit": {
     "applies": true,
-    "reason": "Mid and Rich are bypassed under the NO_ACTION_FINDINGS rule in src/evaluator/tiers.py. When the gold finding_type is no_issue_found, diagnostic_deferral, or insufficient_data, the right answer is 'no concrete change' and there is no action vocabulary or quantification to verify. Correctness (enum equality on the four decision fields) is sufficient."
+    "reason": "Mid and Rich are bypassed under the NO_ACTION_FINDINGS rule in src/evaluator/enums.py. When the gold finding_type is no_issue_found, diagnostic_deferral, or insufficient_data, the right answer is 'no concrete change' and there is no action vocabulary or quantification to verify. Correctness (enum equality on the four decision fields) is sufficient."
   }
 }

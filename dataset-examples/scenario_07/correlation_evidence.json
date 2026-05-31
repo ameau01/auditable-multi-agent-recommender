@@ -1,0 +1,32 @@
+[
+  {
+    "tier_a": "cache",
+    "tier_b": "database",
+    "metric_a": "cache_hit_ratio",
+    "metric_b": "db_query_p95_latency_ms",
+    "coefficient": -0.961,
+    "lag_minutes": 0,
+    "alignment_score": 0.021,
+    "description": "must hold on at least 9 of 10 weekday dates during business hours"
+  },
+  {
+    "tier_a": "cache",
+    "tier_b": "compute",
+    "metric_a": "cache_hit_ratio",
+    "metric_b": "application_p95_latency_ms",
+    "coefficient": -0.963,
+    "lag_minutes": 0,
+    "alignment_score": 0.021,
+    "description": "must hold on at least 9 of 10 weekday dates during business hours"
+  },
+  {
+    "tier_a": "cache",
+    "tier_b": "database",
+    "metric_a": "cache_hit_ratio",
+    "metric_b": "db_cache_hit_ratio",
+    "coefficient": 0.924,
+    "lag_minutes": 0,
+    "alignment_score": 0.844,
+    "description": "must hold on at least 9 of 10 weekday dates during business hours"
+  }
+]
