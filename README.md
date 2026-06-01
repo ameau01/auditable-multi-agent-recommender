@@ -3,10 +3,15 @@
 [![Hugging Face Dataset](https://img.shields.io/badge/Dataset-synthesized--cloud--optimization--recommendations-yellow)](https://huggingface.co/datasets/ameau01/synthesized-cloud-optimization-recommendations)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](pyproject.toml)
+[![CI](https://github.com/ameau01/multi-agent-cloud-optimization-recommender/actions/workflows/lint-typecheck-test.yml/badge.svg)](https://github.com/ameau01/multi-agent-cloud-optimization-recommender/actions/workflows/lint-typecheck-test.yml)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
 ![Status](https://img.shields.io/badge/Status-In%20Active%20Development-yellow)
 **v1.0.0**
 - Design documentation complete (architecture, agents, harnesses, MCP contract, audit trail, evaluation, decisions). 
+- MCP Server with Pydantic model added.
+- EvalSet with golden answers and evaluator code complete.
 
 **Trust the recommendation because you can trace it, not because you trust the model.**
 
@@ -94,21 +99,23 @@ A review begins with a trigger naming the target app — optionally with the ale
 - **An MCP server exposing the read surface.** Specialists query telemetry through a Model Context Protocol tool surface — the scoped, per-tier read contract a specialist is allowed to see becomes its MCP toolset, so cross-tier access is structurally impossible. [`docs/mcp-server.md`](docs/mcp-server.md).
 - **A published Hugging Face dataset** [`ameau01/synthesized-cloud-optimization-recommendations`](https://huggingface.co/datasets/ameau01/synthesized-cloud-optimization-recommendations). 18 scenarios, each with a hand-crafted target recommendation. The system is graded against that recommendation, not against itself.
 - **A replayable audit trail** Every recommendation links back to the specific evidence that justified it.
-- **A three-tier evaluator.** Floor checks structure. Mid checks keyword and multi-tier reasoning. Rich checks fixture citations plus quantified projections. Single-shot agents typically fail Rich. Orchestrated agents pass.
+- **A four-layer evaluator, two modes.** Shape and Correctness are deterministic rule-based gates: well-formed JSON, strict enum equality on finding_type, primary_tier, secondary_tier, action_category. Mid and Rich are scored by an auditable LLM judge against a published rubric: did the agent engage with the right evidence, did it produce orchestrated synthesis. Mid and Rich are gated on Correctness, so a wrong-answer prediction is reported as "wrong answer" rather than "right answer but thin." The judge can flag but cannot override the deterministic verdict.
 
 ### Expected scores by baseline
 
-| Baseline                                | Floor | Mid     | Rich    |
-|-----------------------------------------|-------|---------|---------|
-| Trivial (canned answer)                 | 1-2   | 0       | 0       |
-| Random (random allowed values)          | 4-6   | 0       | 0       |
-| Single-shot frontier LLM, no tools      | 18    | 12-15   | 8-12    |
-| Orchestrated multi-agent (this project) | 18    | 18      | 18      |
+| Baseline                                | Shape (18) | Correctness (18) | Mid (cond.) | Rich (cond.) |
+|-----------------------------------------|------------|------------------|-------------|--------------|
+| Trivial (canned answer)                 | 18         | 1                | 0 or 1      | 0 or 1       |
+| Random (random allowed values)          | 18         | 3 to 5           | 0 to 1      | 0 to 1       |
+| Single-shot frontier LLM, no tools      | 18         | 14 to 17         | 10 to 15    | 6 to 10      |
+| Orchestrated multi-agent (this project) | 18         | 18               | 18          | 18           |
 
-Numbers are projections, not measurements. The gap between row three and
-row four is what justifies the orchestration. See
-[`docs/eval-set.md`](docs/eval-set.md) for the per-tier check definitions
-and calibration discipline.
+Numbers are projections, not measurements. Mid and Rich denominators
+are the Correctness pass count for that row, not 18. The gap between
+row three and row four is what justifies the orchestration. See
+[`docs/eval-set.md`](docs/eval-set.md) for the two-mode design
+(deterministic gates plus auditable LLM judge), the short-circuit rule
+for no-action findings, and the honest limits of each mode.
 
 ## Audit-trail walkthrough
 
@@ -180,7 +187,7 @@ python -m scripts.replay --scenario 8
 ```
 
 The dataset lives at
-[`ameau01/synthesized-cloud-optimization-recommendations`](https://huggingface.co/datasets/ameau01/synthesized-cloud-optimization-recommendations). The first run downloads it via `huggingface_hub.snapshot_download` and caches it under `~/.cache/huggingface/`. The cache is shared across projects and persists across sessions. (These commands target the built system; see the status note above for what is committed at this stage.)
+[`ameau01/synthesized-cloud-optimization-recommendations`](https://huggingface.co/datasets/ameau01/synthesized-cloud-optimization-recommendations). The first run downloads it via `huggingface_hub.snapshot_download` and caches it at `<repo-root>/.hf_cache/` (about 12 MB). The cache is gitignored, lives inside the repo so the project stays self-contained, and persists across sessions. Reset with `rm -rf .hf_cache`. The default location is set by `HF_HOME=.hf_cache` in `.env.example`; copy that to `.env` and edit it (relative paths resolve against the project root, absolute paths are used as-is) if you want the cache somewhere else, including a shared system cache. (These commands target the built system; see the status note above for what is committed at this stage.)
 
 ## Repo map
 
@@ -188,24 +195,76 @@ The dataset lives at
 .
 ├── README.md                          # you are here
 ├── ARCHITECTURE.md                    # The diagram, the flow, the principles
+├── CHANGELOG.md                       # Phase-by-phase build log
 ├── docs/
 │  ├── agents.md                       # What each of the six agents does
 │  ├── harnesses.md                    # The four cross-cutting properties
 │  ├── audit-trail.md                  # Replayability and the schema
-│  ├── eval-set.md                     # Floor / Mid / Rich scoring
+│  ├── eval-set.md                     # Four-layer scoring: Shape, Correctness, Mid, Rich
 │  ├── mcp-server.md                   # MCP read contract + dataset loading
 │  └── decisions.md                    # Trade-offs, alternatives, limitations
 ├── src/
 │  ├── data_loader.py                  # Fetches dataset from Hugging Face
-│  ├── agents/                         # Multi-agent orchestration
-│  ├── harnesses/                      # Input, reasoning, action, audit
-│  ├── evaluator/                      # Floor + Mid + Rich tier scorer
-│  └── mcp_server/                     # MCP tool surface implementation
-├── dataset-examples/
-│  ├── scenario_08/                    # Example dataset files for scenario 08
-│  └── tests/                          # Self-contained tests for the static scenario
-└── tests/
-    └── fixtures/                      # 1-2 vendored scenarios for unit tests
+│  ├── agents/                         # orchestrate() interface (stub today)
+│  ├── harnesses/                      # input, reasoning, action, audit (not yet implemented)
+│  ├── models/                         # Pydantic schemas: single home for all data shapes
+│  │  ├── composite.py                  #   Composite, ScoringMetadata, TraceSection, etc.
+│  │  └── telemetry.py                  #   MCP-server response models (17 of 18 tools typed)
+│  ├── renderer/                       # Composite -> report.md + trace.json
+│  │  ├── render_report.py             #   markdown recommendation report
+│  │  ├── render_trace.py              #   audit-trail JSON
+│  │  └── __main__.py                  #   CLI: --composite PATH --out-report/--out-trace
+│  ├── mcp_server/                     # MCP read contract over the dataset
+│  │  ├── server.py                    #   FastMCP instance + tool registration
+│  │  ├── _stats.py                    #   percentile, time-pattern, breach helpers
+│  │  ├── scope.py                     #   per-specialist tool+tier allow-list
+│  │  └── tools/                       #   18 tools across 4 families
+│  ├── evaluator/                      # Pure scoring code (no data files)
+│  │  ├── enums.py                     #   Enum universes + NO_ACTION_FINDINGS sentinel
+│  │  ├── rules.py                     #   Per-scenario rubric loader + validator
+│  │  ├── shape_measure.py             #   score_shape
+│  │  ├── correctness_measure.py       #   score_correctness
+│  │  ├── mid_measure.py               #   score_mid
+│  │  ├── richness_measure.py          #   score_rich
+│  │  ├── scoring_helpers.py           #   Shared prediction_text helper
+│  │  ├── tiers.py                     #   Back-compat facade re-exporting layer funcs
+│  │  ├── evaluator.py                 #   Evaluator class (stateful API)
+│  │  └── eval.py                      #   CLI scorer (--app-name app-NN --prediction FILE)
+├── eval-set/                          # The benchmark (pure data + one demo)
+│  ├── expectations/                   #   18 composites (NN/raw_recommendation.json)
+│  │                                   #     each carries gold + scoring rubric in one file
+│  ├── demo_scoring.py                 #   Scores one gold (app-08); usage example
+│  └── README.md
+├── dataset-examples/                  # 3 telemetry-only scenarios (gold answers redacted)
+│  ├── scenario_02/                    #   compute / scaling_policy_change (single-tier)
+│  ├── scenario_07/                    #   cache / cache_capacity_adjustment (cross-tier)
+│  └── scenario_08/                    #   database / query_cache_optimization (cross-tier)
+├── sample_runs/                       # 3 sample full composites + rendered reports + traces
+│  ├── scenario_02/raw_recommendation.json
+│  ├── scenario_07/raw_recommendation.json
+│  ├── scenario_08/raw_recommendation.json
+│  ├── reports/                        #   markdown reports rendered from composites
+│  ├── traces/                         #   audit trails rendered from composites
+│  └── README.md
+├── tests/                             # Two categories: fast unit, slower integration
+│  ├── unit/                           #   src/ code unit tests (fast, default run)
+│  │  ├── evaluator/                   #     Per-module: shape, correctness, mid, richness, enums, rules, evaluator, tiers
+│  │  └── agents/                      #     orchestrator contract
+│  ├── integration/                    #   evaluator against real data + mocks
+│  │  ├── fixtures/mock_predictions/   #     4 JSON mocks used by edge-case tests
+│  │  ├── test_eval_set_data.py        #     gold answers well-formed
+│  │  ├── test_golden_answers.py       #     every gold passes every layer
+│  │  ├── test_edge_cases.py           #     each bad mock fails expected layer
+│  │  └── test_eval_cli.py             #     CLI argparse, exit codes, end-to-end scoring
+│  └── run_all_tests.py                #   Default: unit only. --all for both.
+├── scripts/                           # Wrapper scripts for common operations
+│  ├── run_golden.sh                   #   Gold-answer validation
+│  ├── run_integration.sh              #   All integration tests
+│  ├── run_demo.sh                     #   eval-set demo
+│  └── verify_trace.py                 #   Walks audit trail, confirms refs resolve
+└── notebooks/
+   ├── 01_eval_walkthrough.ipynb       # Real end-to-end eval against scenario 08
+   └── 02_agent_orchestration_preview.ipynb  # Mocked orchestration pipeline
 ```
 
 The 18 scenarios are not in the repo. They are pulled at runtime from the Hugging Face dataset linked above. The local cache makes repeat runs fast.
