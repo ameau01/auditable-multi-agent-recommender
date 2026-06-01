@@ -21,7 +21,9 @@ Three reasons MCP was chosen over a bespoke tool layer:
 
 ## The dataset that the server wraps
 
-The published dataset lives at [`ameau01/synthesized-cloud-optimization-recommendations`](https://huggingface.co/datasets/ameau01/synthesized-cloud-optimization-recommendations) on Hugging Face. The server pulls it on first run via `huggingface_hub.snapshot_download` and caches it under `~/.cache/huggingface/`. The first call costs about 12 MB of download. Every later call hits the cache and stays offline.
+The published dataset lives at [`ameau01/synthesized-cloud-optimization-recommendations`](https://huggingface.co/datasets/ameau01/synthesized-cloud-optimization-recommendations) on Hugging Face. The server pulls it on first run via `huggingface_hub.snapshot_download` and caches it at `<repo-root>/.hf_cache/`. The first call costs about 12 MB of download. Every later call hits the cache and stays offline.
+
+The project-local cache keeps the repo self-contained: a reviewer who clones the project sees the downloaded artifacts in one folder and can reset with `rm -rf .hf_cache`. The default cache directory is set by `HF_HOME=.hf_cache` in `.env.example`; copy that to `.env` and edit `HF_HOME` if you want the cache somewhere else (relative paths resolve against the project root). The `.hf_cache/` directory is gitignored.
 
 Pin a specific commit hash in `src/data_loader.py` to lock the dataset version. Leave the pin as `None` during development, and pin it once you start producing baseline numbers.
 
@@ -120,7 +122,62 @@ This is the strongest demo the project has.
 
 ## Implementation status
 
-The MCP server is part of the planned implementation. The architectural intent is documented here. When the code lands it will live in `src/mcp_server/`, with one file per tool family.
+Implemented at `src/mcp_server/`. One file per tool family
+under `src/mcp_server/tools/`, statistical helpers in `_stats.py`,
+per-specialist allow-list in `scope.py`, FastMCP wiring in `server.py`,
+stdio entry point at `python -m src.mcp_server`. The `mcp` Python SDK
+is pinned exactly in `pyproject.toml` because the FastMCP submodule
+changes contract between releases; bump the pin alongside a fresh
+`uv.lock`.
+
+### Error model
+
+Tools raise `mcp.server.fastmcp.exceptions.ToolError` for agent-visible
+errors with a stable code prefix on the message:
+
+  - `invalid_input`: malformed argument (bad `app_name` format, wrong
+    comparator, negative `n_bins`, etc.).
+  - `unknown_app`: well-formed `app-NN` but no such scenario in the
+    dataset.
+  - `unknown_tier`: tier name typo, or a valid tier that this scenario
+    does not include (e.g. asking for cache telemetry on a compute-only
+    scenario).
+  - `unknown_metric`: metric field not present in the tier's records.
+
+Plain Python exceptions raised inside a tool (file missing, dataset
+malformed, etc.) are masked by FastMCP as a generic internal error so
+implementation paths don't leak to the wire.
+
+### Verifying the server
+
+1. **Unit tests for the helpers + scope contract.**
+   ```bash
+   uv run python -m pytest tests/unit/mcp_server/ -v
+   ```
+   34 tests cover the statistical helpers and the scope-allowlist
+   consistency.
+
+2. **Wire-layer integration test.**
+   ```bash
+   uv run python -m pytest tests/integration/test_mcp_server.py -v
+   ```
+   Spawns the server as a subprocess, exercises tools/list and one
+   tools/call per family. Auto-skips in environments without network
+   access to Hugging Face (the dataset needs to be fetched on first run).
+
+3. **MCP Inspector (manual).** Before wiring Claude Desktop, run the
+   server through Anthropic's Inspector to validate the tool surface
+   in isolation. From the project root:
+   ```bash
+   npx @modelcontextprotocol/inspector uv run python -m src.mcp_server
+   ```
+   The Inspector UI lists every tool with its auto-generated JSON
+   schema, lets you call each one interactively, and surfaces errors
+   without the GUI-client overhead.
+
+4. **Claude Desktop (manual).** Add the config block from the section
+   above to `claude_desktop_config.json` and restart Claude Desktop.
+   The server appears under `cloud-optimization` with all 18 tools.
 
 ## Loading the dataset without the MCP server
 

@@ -22,6 +22,11 @@ dependencies = [
     # LLM judge clients (provider chosen at runtime via LLM_JUDGE_PROVIDER).
     "anthropic>=0.30.0",
     "openai>=1.40.0",
+    # MCP server framework. Pinned exactly because the FastMCP submodule
+    # diverges between releases (decorator names, import paths) and a
+    # silently-updated SDK would change the wire contract under us.
+    # Bumping is a one-line change; commit uv.lock alongside.
+    "mcp==1.27.2",
     # Persistent audit trail. SQLite ships with stdlib; SQLAlchemy is the ORM.
     "sqlalchemy>=2.0",
     # Used by the System Mapper to parse main.tf into a dependency graph.

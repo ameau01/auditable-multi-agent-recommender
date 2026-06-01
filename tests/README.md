@@ -20,7 +20,7 @@ tests/
 │   │   ├── test_evaluator.py                   Evaluator class (direct constructor)
 │   │   └── test_tiers.py                       facade + score_all_tiers
 │   └── agents/                                 mirrors src/agents/
-│       └── test_orchestrator.py                Phase 7 stub contract
+│       └── test_orchestrator.py                orchestrate() stub contract
 ├── integration/                                end-to-end against real data
 │   ├── conftest.py
 │   ├── fixtures/

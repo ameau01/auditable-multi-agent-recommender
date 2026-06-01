@@ -28,3 +28,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - `Eval-set.md`, `Agend.md`, `ARCHITECTURE.md`, `decisions.md`
+
+## [Sample Dataset and sample-run]
+### Changed
+- update eval-set.md
+- update docs/eval-set.md
+- update eval-set/README.md
+
+### Added
+- Added example dataset (scenario 06, 15, 17)
+- Added sample-run for scneario 06, 15, 17
+
+## [MCP Server]  Add implementation of MCP sever.
+
+### Added
+- added src/mcp-server
+- added tests/integration/test_mcp_server.py
+- added tests/unit/mcp_server
+
+### Documentation
+- Update docs/mcp-server.md
+
