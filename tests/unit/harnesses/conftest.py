@@ -1,23 +1,24 @@
 """Shared fixtures for harness-class unit tests.
 
-Every harness writes to the audit store, so each test gets a fresh
-SQLite file under tmp_path.
+Uses in-memory SQLite (`:memory:` + StaticPool). Each test gets a
+fresh per-test database with no filesystem I/O — no mkdir, no fsync,
+no dotenv lookup. Roughly 50x faster than file-backed and removes
+the macOS APFS / Time Machine hot-spot that made earlier
+file-per-test fixtures hang in some environments.
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from src.audit import AuditStore
+from src.audit.store import IN_MEMORY
 
 
 @pytest.fixture
-def store(tmp_path: Path) -> AuditStore:
-    """Fresh AuditStore on a tmp_path SQLite file. Initializes schema."""
-    db_path = tmp_path / "audit.db"
-    s = AuditStore(db_path=str(db_path))
+def store() -> AuditStore:
+    """Fresh in-memory AuditStore for one test. Schema initialized."""
+    s = AuditStore(db_path=IN_MEMORY)
     s.initialize()
     return s
 

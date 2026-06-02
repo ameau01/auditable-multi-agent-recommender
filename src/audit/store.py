@@ -25,6 +25,7 @@ from typing import Any
 from dotenv import load_dotenv
 from sqlalchemy import create_engine, event, insert, select
 from sqlalchemy.engine import Engine
+from sqlalchemy.pool import StaticPool
 
 from ..models.audit import AuditRecord, HarnessRecord, InternalOpRecord
 from .schema import audit_records, harness_trail, internal_ops, metadata
@@ -34,13 +35,29 @@ from .schema import audit_records, harness_trail, internal_ops, metadata
 # gitignored. Docker overrides via AUDIT_DB_PATH env.
 DEFAULT_AUDIT_DB_PATH = ".audit_db/audit.db"
 
+# Sentinel for in-memory operation. Callers (typically tests) pass this
+# to bypass all filesystem work — no dotenv lookup, no path resolution,
+# no mkdir. Pairs with a StaticPool so one shared in-memory DB persists
+# across the engine's connections.
+IN_MEMORY = ":memory:"
+
 
 def _resolve_db_path(explicit: str | None) -> Path:
     """Resolve the audit DB path. Precedence: explicit arg, then
     AUDIT_DB_PATH env, then the default. Relative paths are anchored to
-    the project root (the parent of the `src/` directory)."""
-    load_dotenv()
-    raw = explicit or os.environ.get("AUDIT_DB_PATH", DEFAULT_AUDIT_DB_PATH)
+    the project root (the parent of the `src/` directory).
+
+    When `explicit` is set, `load_dotenv()` is skipped — the caller is
+    providing the path directly, so reading the env would be wasted
+    work. This matters for tests, which create fresh stores in a loop
+    and would otherwise pay the dotenv-walk cost (a filesystem walk
+    upward from cwd) per fixture.
+    """
+    if explicit is not None:
+        raw = explicit
+    else:
+        load_dotenv()
+        raw = os.environ.get("AUDIT_DB_PATH", DEFAULT_AUDIT_DB_PATH)
     p = Path(raw)
     if not p.is_absolute():
         # src/audit/store.py -> walk up two parents to find project root.
@@ -113,11 +130,25 @@ class AuditStore:
     """
 
     def __init__(self, db_path: str | None = None) -> None:
-        self.db_path = _resolve_db_path(db_path)
-        self._engine: Engine = create_engine(
-            f"sqlite:///{self.db_path}",
-            future=True,
-        )
+        # In-memory short-circuit. Skips dotenv, path resolution, and
+        # mkdir entirely. Uses StaticPool + check_same_thread=False so
+        # a single shared in-memory database lives for the engine's
+        # lifetime — without that, each new connection would see its
+        # own empty `:memory:` instance.
+        if db_path == IN_MEMORY:
+            self.db_path = Path(IN_MEMORY)
+            self._engine: Engine = create_engine(
+                "sqlite:///:memory:",
+                future=True,
+                poolclass=StaticPool,
+                connect_args={"check_same_thread": False},
+            )
+        else:
+            self.db_path = _resolve_db_path(db_path)
+            self._engine = create_engine(
+                f"sqlite:///{self.db_path}",
+                future=True,
+            )
         # Register the FK-enforcement hook on every new connection.
         event.listen(self._engine, "connect", _enable_sqlite_fks)
 
