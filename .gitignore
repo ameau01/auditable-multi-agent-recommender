@@ -7,6 +7,11 @@ INTERNAL_*
 # with `rm -rf .hf_cache`.
 .hf_cache/
 
+# --- Audit trail SQLite database (created at runtime by AuditStore) ---
+# Override location via AUDIT_DB_PATH env. Default: .audit_db/audit.db.
+# Reset with `rm -rf .audit_db`.
+.audit_db/
+
 # --- One-shot HuggingFace dataset uploads (regenerated, not source) ---
 HF_dataset_update*.zip
 HF_upload/

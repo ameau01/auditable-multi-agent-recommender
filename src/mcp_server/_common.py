@@ -31,15 +31,26 @@ from typing import Any
 from mcp.server.fastmcp.exceptions import ToolError
 
 from ..data_loader import list_scenario_ids, load_scenario
+from ..models.enums import TIERS, Tier
 
 
-# Map a tier name to the key on the scenario dict that holds its telemetry.
-_TIER_TO_TELEMETRY_KEY: dict[str, str] = {
+# Map a Tier to the key on the scenario dict that holds its telemetry.
+# The keys must cover every value of the Tier Literal — the assertion
+# below catches drift between this dict and the canonical Tier definition
+# in src/models/enums.py at import time.
+_TIER_TO_TELEMETRY_KEY: dict[Tier, str] = {
     "compute":  "compute_telemetry",
     "database": "database_telemetry",
     "cache":    "cache_telemetry",
     "network":  "network_telemetry",
 }
+
+# Drift guard: every Tier Literal value must have a telemetry-key mapping.
+assert set(_TIER_TO_TELEMETRY_KEY.keys()) == TIERS, (
+    f"Tier mapping in _common.py drifted from src/models/enums.py Tier "
+    f"Literal: mapping={set(_TIER_TO_TELEMETRY_KEY.keys())}, "
+    f"literal={TIERS}"
+)
 
 ALLOWED_TIERS: tuple[str, ...] = tuple(_TIER_TO_TELEMETRY_KEY.keys())
 

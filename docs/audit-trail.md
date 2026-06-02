@@ -68,8 +68,8 @@ A developer or reviewer can walk the chain forward or backward. The system's rea
 
 The full agent system is not yet implemented (Phase 7 in `CHANGELOG.md`). Until it is, the auditability contract is verified by:
 
-- **`examples/verify_trace.py`** A standalone script that walks the sample trace backward and confirms every parent reference resolves. Runs in under a second; exits non-zero if any pointer is dangling.
-- **`examples/traces/scenario_08_trace.json`** The sample trace with all the required IDs and foreign keys in place.
+- **`tests/verify_trace.py`** A standalone script that walks the sample traces backward and confirms every parent reference resolves. Runs in under a second; exits non-zero if any pointer is dangling.
+- **`sample_runs/traces/scenario_NN_trace.json`** Sample traces for scenarios 02, 07, and 08 with all the required IDs and foreign keys in place.
 
 When the agents are implemented, the Action Harness's `evidence_completeness` check runs the same verification at gate time on every live review. The `verified_refs` field on that check is what carries the result.
 
@@ -90,113 +90,99 @@ A vector database **would** be appropriate for a different concern, semantic ret
 
 **Storage engine** SQLite for the portfolio. Single file, zero infrastructure, ships with Python. The audit trail demo runs anywhere. The senior signal is the schema design, not the engine, the same schema upgrades cleanly to Postgres for production.
 
-## Conceptual schema
+## Storage shape
 
-The conceptual schema below describes the record categories and their relationships. Concrete column types are deferred to implementation.
+Two append-only SQLite tables in a single file. The split is deliberate: the first table is the artifact a governance reviewer reads (the reasoning trail); the second is for developer-facing debugging of post-hoc operations (eval runs, report renders). Mixing them would dilute the main story.
+
+### `audit_records` — the reasoning trail
+
+One polymorphic table. Every event inside a review cycle is a row. The type field discriminates; the category field tells the two reports (decision trace, evidence trace) which records to walk.
 
 ```text
-reviews
- - review_id (primary key)
- - application_id
- - trigger_type
- - scenario_hash
- - started_at
- - completed_at
- - final_status   (approved | rejected | deferred | error)
-
-ingest_validations
- - validation_id
- - review_id (FK → reviews)
- - check_name
- - verdict
- - details
- - emitted_at
-
-architecture_models
- - model_id
- - review_id (FK → reviews)
- - tiers      (structured: list of tier descriptors)
- - dependencies   (structured: list of inter-tier edges)
- - analysis_plan  (structured: specialists required, cross-tier pairs)
- - emitted_at
-
-supervisor_decisions
- - decision_id
- - review_id (FK → reviews)
- - decision_type  (invoke_specialist | retry | escalate | aggregate)
- - decision_details (structured)
- - emitted_at
-
-specialist_steps
- - step_id
- - review_id (FK → reviews)
- - specialist    (compute | data_layer | network)
- - step_index    (ordinal within the specialist's ReAct loop)
- - thought
- - action_name
- - action_params  (structured)
- - observation   (structured)
- - emitted_at
-
-specialist_findings
- - finding_id
- - review_id (FK → reviews)
- - specialist
- - finding_type   (issue_found | no_issue_found | insufficient_data)
- - recommendation  (nullable)
- - evidence_refs  (structured: list of step_id references)
- - reasoning_trace_summary
- - specialist_confidence
- - confidence_breakdown (structured)
- - emitted_at
-
-evaluator_drift_checks
- - drift_check_id
- - review_id (FK → reviews)
- - target_finding_id (FK → specialist_findings)
- - verdict     (tight | loose | contradictory)
- - reasoning
- - emitted_at
-
-evaluator_records
- - evaluator_id
- - review_id (FK → reviews)
- - cross_tier_interactions (structured)
- - trade_off_scores    (structured: cost, performance, reliability)
- - synthesis        (structured: balanced recommendation)
- - evaluator_confidence
- - confidence_breakdown  (structured)
- - contributing_findings  (structured: list of finding_id references)
- - emitted_at
-
-action_harness_gate_records
- - gate_id
- - review_id (FK → reviews)
- - evaluator_id (FK → evaluator_records)
- - well_formedness_verdict
- - evidence_completeness_verdict
- - severity_classification
- - duplication_check_result
- - overall_verdict  (pass | flagged | rejected)
- - emitted_at
-
-review_packets
- - packet_id
- - review_id (FK → reviews)
- - gate_id (FK → action_harness_gate_records)
- - packet_contents    (canonical JSON of what the human sees)
- - emitted_at
-
-hitl_decisions
- - decision_id
- - review_id (FK → reviews)
- - packet_id (FK → review_packets)
- - decision       (approve | reject | defer)
- - reviewer_notes
- - decided_at
+audit_records
+  id                INTEGER PRIMARY KEY AUTOINCREMENT
+  review_cycle_id   TEXT NOT NULL        -- e.g. "cycle_20260601_141522_a3f8b1c0"
+  parent_id         INTEGER              -- self-FK; NULL only for the cycle root
+  category          TEXT NOT NULL        -- 'decision' | 'evidence'
+  type              TEXT NOT NULL        -- concrete sub-type (taxonomy below)
+  agent             TEXT                 -- which agent or harness emitted it
+  content           JSON NOT NULL        -- type-shaped payload
+  emitted_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+  FOREIGN KEY (parent_id) REFERENCES audit_records(id)
+  CHECK (category IN ('decision', 'evidence'))
 ```
 
-The schema is normalized enough to support structured queries but flat enough to be readable in a SQLite shell. The `(structured)` annotations are fields stored as JSON within a column, pragmatic for SQLite, easy to query with `json_extract`, and clean to migrate to Postgres `jsonb` or to fully-typed columns later.
+Indexes:
+
+- `UNIQUE INDEX one_start_per_cycle ON audit_records(review_cycle_id) WHERE type = 'cycle_started'` — the DB itself enforces cycle_id uniqueness.
+- `UNIQUE INDEX one_end_per_cycle ON audit_records(review_cycle_id) WHERE type = 'cycle_completed'` — and one completion per cycle.
+- `INDEX cycle_lookup ON audit_records(review_cycle_id, id)` — covers "all events for cycle X" queries.
+- `INDEX parent_walk ON audit_records(parent_id)` — supports the recursive CTE.
+- `INDEX category_type ON audit_records(category, type)` — supports the two reports.
+
+### Cycle lifecycle modeled as events
+
+There is no separate "reviews" table. A cycle exists when its `cycle_started` row exists; it is complete when a `cycle_completed` row is appended. The `cycle_completed` row's `parent_id` points back to `cycle_started`. Duration is computed at read time as `cycle_completed.emitted_at - cycle_started.emitted_at`.
+
+This preserves strict append-only discipline: nothing is ever UPDATEd. A re-run is a new cycle (new `cycle_id`, new `cycle_started` row). Historic cycles are immutable. Cycle status is a query, not a state — derived from the existence of `cycle_completed`.
+
+### Record taxonomy
+
+**Decision-category** types (the chain of choices the system made — the spine of Report 1):
+
+- `cycle_started`, `cycle_completed` — the begin and end tags
+- `review_request` — the ingest trigger
+- `supervisor_decision` — which specialists were invoked, retries, escalations
+- `thought` — an agent's reasoning step inside a ReAct loop
+- `specialist_finding` — a tier specialist's verdict
+- `evaluator_record` — the cross-tier evaluator's synthesis
+- `recommendation` — the final composite emitted by the cycle
+- `gate_verdict` — Action Harness pass/fail (emitted in a future phase)
+- `hitl_decision` — human approve/reject/defer (future)
+
+**Evidence-category** types (the observed facts decisions cite — the leaves of Report 2):
+
+- `tool_call` — an MCP call (parameters echoed)
+- `observation` — the tool result, the actual data the agent saw
+- `correlation_observation` — a specific correlation record cited
+- `infrastructure_fact` — a specific configuration or terraform finding cited
+
+A decision record's `content.evidence_refs: list[int]` carries the ids of evidence records it cites — this is the many-to-many citation mechanism. Forward citation queries use SQLite's `json_each(content, '$.evidence_refs')` to expand the array into rows and join cleanly; this avoids the `LIKE '%id%'` substring trap (which mis-matches id 5 against ids 15, 25, 50, etc.).
+
+### `internal_ops` — operations on a completed cycle
+
+Separate table, separate audience. Where `audit_records` is the deliverable, `internal_ops` is for developers debugging the system — eval runs, report renders, and similar post-hoc operations land here so the main trail stays focused on the reasoning story. Same DB file; same append-only discipline.
+
+```text
+internal_ops
+  id                INTEGER PRIMARY KEY AUTOINCREMENT
+  op_id             TEXT NOT NULL        -- e.g. "eval_20260601_142003_a3f8b1c0"
+  op_type           TEXT NOT NULL        -- 'evaluation' | 'report_render' | 'evidence_render'
+  target_cycle_id   TEXT NOT NULL        -- the audit_records cycle being operated on
+  target_record_id  INTEGER              -- the specific record (typically the recommendation)
+  parent_id         INTEGER              -- self-FK for multi-step ops
+  type              TEXT NOT NULL        -- sub-type within the op
+  content           JSON NOT NULL
+  emitted_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+  FOREIGN KEY (parent_id) REFERENCES internal_ops(id)
+```
+
+Each evaluation produces a small chain:
+
+- `judge_call` — the prompt sent to the LLM judge (evidence within the op)
+- `evaluator_score` — the synthesized ScoreOneResult with all five layer verdicts (decision within the op)
+
+Multiple evaluations against the same recommendation are supported (prompt tuning, judge non-determinism). Each invocation gets its own `op_id`; reports filter by `target_cycle_id` and group by `op_id`. Cross-table references use plain TEXT — `target_cycle_id` is not a database-level FK, both for SQLite simplicity and because the writer (`AuditStore`) controls both tables.
+
+### JSON content payloads
+
+Both tables store payloads in a `content JSON` column. The Pydantic content models in `src/models/audit.py` define the per-type shape (one class per record `type`). Pydantic validates the shape at write time; at read time, queries either inspect raw JSON via SQLite's `json_extract`/`json_each` or hydrate back into the typed model for application-level use. This is pragmatic for SQLite and migrates cleanly to Postgres `jsonb` or fully-typed columns later.
+
+### Storage engine and file location
+
+SQLite for the portfolio. The database file location is configured via the `AUDIT_DB_PATH` environment variable, defaulting to `.audit_db/audit.db` (hidden directory under the project root, gitignored — same pattern as the `.hf_cache/` location used for the published dataset). For Docker deployments, mount a volume to a known path and override `AUDIT_DB_PATH` in the container environment.
+
+`PRAGMA foreign_keys = ON;` is set on every connection. SQLite does not enforce foreign keys by default, and the "every parent reference resolves" claim is empty without it. The `AuditStore` connection layer enforces this on every connect.
 
 ## What the audit trail does not do
 

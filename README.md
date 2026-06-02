@@ -209,7 +209,15 @@ The dataset lives at
 │  ├── harnesses/                      # input, reasoning, action, audit (not yet implemented)
 │  ├── models/                         # Pydantic schemas: single home for all data shapes
 │  │  ├── composite.py                  #   Composite, ScoringMetadata, TraceSection, etc.
-│  │  └── telemetry.py                  #   MCP-server response models (17 of 18 tools typed)
+│  │  ├── telemetry.py                  #   MCP-server response models (all 18 tools typed)
+│  │  ├── scoring.py                    #   Evaluator outputs: CheckResult, TierResult, JudgeResult, ScoreOneResult
+│  │  ├── audit.py                      #   AuditRecord + InternalOpRecord + typed content sub-models
+│  │  └── enums.py                      #   Cross-cutting Literals: Tier, FindingType, AgentName, RecordType, ...
+│  ├── audit/                           # Audit trail persistence (SQLite via SQLAlchemy Core)
+│  │  ├── schema.py                     #   Two tables: audit_records (reasoning) + internal_ops (eval/render)
+│  │  ├── store.py                      #   AuditStore: start_cycle, add_event, complete_cycle, evaluate_recommendation
+│  │  ├── queries.py                    #   Recursive CTE walks + json_each forward citations
+│  │  └── composer.py                   #   compose_from_cycle(cycle_id) -> Composite
 │  ├── renderer/                       # Composite -> report.md + trace.json
 │  │  ├── render_report.py             #   markdown recommendation report
 │  │  ├── render_trace.py              #   audit-trail JSON

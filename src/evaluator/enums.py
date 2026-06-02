@@ -1,71 +1,55 @@
-"""Single source of truth for the eval-set's enum universes.
+"""Runtime enum universes consumed by the evaluator's rules validator.
 
-Every value an agent can produce for finding_type, primary_tier,
-secondary_tier, or action_category must be in one of the frozensets below.
-Per-scenario scoring rules (the `scoring_metadata` block inside
-eval-set/expectations/NN/raw_recommendation.json) narrow these universes
-to single values, but their allowed lists must contain only values
-defined here.
+These are frozensets derived from the canonical Literal types in
+`src/models/enums.py`. Two layers, two purposes:
+
+  - `src/models/enums.py` owns the Literal types (compile-time vocabulary).
+    Cross-cutting; used by Pydantic models, MCP server, audit store.
+  - This file owns runtime frozensets that include None where the
+    evaluator's per-scenario rules allow null values (e.g.
+    primary_tier=None on a no_issue_found scenario), plus tuning
+    constants (MID_THRESHOLD, RICH_THRESHOLD) and the short-circuit
+    sentinel set that are evaluator-internal.
 
 When adding a new enum value:
-  1. Add it to the appropriate frozenset below.
-  2. Update docs/eval-set.md's "Enum reference" table.
-  3. Update any composite scoring_metadata that should use it.
-  4. The rules-validator test in tests/integration/ will catch drift.
-
-NO_ACTION_FINDINGS is the sentinel set used by the short-circuit rule in
-richness.py: when a prediction's finding_type is in this set, the Mid and
-Rich layers bypass their per-check logic and return a single short_circuit
-marker. See richness.py for the rationale.
+  1. Add it to the appropriate Literal in `src/models/enums.py`.
+  2. The frozensets below auto-include it via re-derivation.
+  3. Update `docs/eval-set.md` enum reference + any composite gold
+     answers that should use it.
+  4. The rules-validator test in `tests/integration/` catches drift.
 """
 
 from __future__ import annotations
 
-
-# ============================================================
-# Enum universes
-# ============================================================
-FINDING_TYPES: frozenset[str | None] = frozenset({
-    "issue_found",
-    "no_issue_found",
-    "diagnostic_deferral",
-    "insufficient_data",  # Forward-compatible, not yet used in any gold
-})
-
-PRIMARY_TIERS: frozenset[str | None] = frozenset({
-    "compute",
-    "database",
-    "cache",
-    "network",
-    "deferred",  # Sentinel for diagnostic_deferral scenarios
-    None,
-})
-
-SECONDARY_TIERS: frozenset[str | None] = frozenset({
-    "compute",
-    "database",
-    "cache",
-    "network",
-    "deferred",
-    None,
-})
-
-ACTION_CATEGORIES: frozenset[str | None] = frozenset({
-    "rightsizing",
-    "scaling_policy_change",
-    "query_cache_optimization",
-    "cache_capacity_adjustment",  # Cache-specific
-    "load_balancer_reconfiguration",
-    "network_topology_change",
-    "sla_review",
-    "pool_sizing",       # Reserved; not currently in any gold
-    "replica_adjustment",  # Reserved; not currently in any gold
-    None,
-})
+from ..models.enums import (
+    ACTION_CATEGORY_VALUES,
+    FINDING_TYPE_VALUES,
+    TIERS_OR_DEFERRED,
+)
 
 
 # ============================================================
-# Sentinel set for short-circuit rule
+# Enum universes — runtime frozensets, derived from the Literals
+# ============================================================
+# FINDING_TYPES does not include None because every recommendation has
+# a finding_type. The | None on the type is for downstream caller
+# convenience (a scoring rule's allowed list type is `list[str | None]`).
+FINDING_TYPES: frozenset[str | None] = frozenset(FINDING_TYPE_VALUES)
+
+# PRIMARY_TIERS / SECONDARY_TIERS include None — a no_issue_found
+# recommendation has primary_tier=null, and the evaluator's rule
+# universe must accept that.
+PRIMARY_TIERS: frozenset[str | None] = frozenset(TIERS_OR_DEFERRED) | {None}
+
+SECONDARY_TIERS: frozenset[str | None] = PRIMARY_TIERS
+
+# ACTION_CATEGORIES include None — no_issue_found / diagnostic_deferral
+# have null action_category.
+ACTION_CATEGORIES: frozenset[str | None] = frozenset(ACTION_CATEGORY_VALUES) | {None}
+
+
+# ============================================================
+# Sentinel set for short-circuit rule (evaluator-internal)
 # ============================================================
 # When a prediction's finding_type is in this set, score_mid and score_rich
 # bypass their per-check logic. Rationale (hallucination prevention): when

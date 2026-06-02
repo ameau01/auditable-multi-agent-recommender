@@ -63,3 +63,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - `docs/eval-set.md`, `docs/eval-set.md`, `docs/mcp-server.md`
+
+## [AUDIT TRAIL] implementation
+### Added
+- initialize with SQL Lite from os/.env of (AUDIT_DB_PATH=.audit_db/audit.db)
+- add method and schema for two table audit trails 
+- add source code for src/audit 
+- add unit tests for audit-trail
+
+
+### Changed
+- update src/models/enum.py for common enum.
+
+### Documentations
+- `docs\audit-trail.md`
+- 
