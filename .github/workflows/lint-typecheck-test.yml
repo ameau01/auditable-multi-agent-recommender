@@ -1,33 +1,57 @@
 name: Lint, Type-check & Test
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
+
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+
       - name: Install uv
         uses: astral-sh/setup-uv@v6
+
       - name: Install dependencies
         run: uv sync
+
+      # Cache the HF dataset snapshot across CI runs. Without this, every
+      # push fetches the dataset fresh, which trips HF's rate limit
+      # (HTTP 429) on the wire-layer MCP integration tests. The cache key
+      # is bound to data_loader.py so a change there (different revision,
+      # different repo) invalidates the cache correctly.
+      - name: Cache HF dataset
+        uses: actions/cache@v4
+        with:
+          path: .hf_cache
+          key: hf-cache-${{ hashFiles('src/data_loader.py') }}
+          restore-keys: |
+            hf-cache-
+
       - name: Run linting (ruff)
         run: uv run ruff check .
+
       - name: Run type checking (mypy)
         run: uv run mypy src
+
       - name: Run tests
         run: uv run pytest -q --junitxml=test-results.xml
+
       - name: Test summary
         uses: test-summary/action@v2
         if: always()
         with:
           paths: "test-results.xml"
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()

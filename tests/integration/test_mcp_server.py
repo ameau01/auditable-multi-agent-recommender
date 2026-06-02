@@ -24,23 +24,58 @@ from __future__ import annotations
 
 import asyncio
 import socket
+import urllib.error
+import urllib.request
 
 import pytest
 
 
+_DATASET_REPO = "ameau01/synthesized-cloud-optimization-recommendations"
+
+
 def _has_hf_network() -> bool:
-    """Quick TCP connect test to huggingface.co:443. Skip the suite when
-    the sandbox blocks it (e.g. SOCKS-only envs)."""
+    """Confirm HF is reachable AND not rate-limited.
+
+    Two checks: (1) TCP connect to huggingface.co:443 succeeds, and
+    (2) a HEAD request to the dataset metadata endpoint returns 2xx.
+    The second check catches HF's HTTP 429 ("Too Many Requests") rate
+    limit that fires on rapid CI pushes — without it, the suite would
+    skip only when the *network* is down, then fail the real tests when
+    the dataset fetches inside them get throttled.
+
+    Returns False on:
+      - connect timeout / connection refused (no HF at all)
+      - 429 (rate-limited; the dataset fetches that the tests do will
+        also fail, so skip the suite cleanly)
+      - any other non-2xx response
+    """
+    # Step 1 — basic reachability
     try:
         with socket.create_connection(("huggingface.co", 443), timeout=3):
-            return True
+            pass
     except (OSError, socket.timeout):
+        return False
+    # Step 2 — actual HF API probe
+    try:
+        req = urllib.request.Request(
+            f"https://huggingface.co/api/datasets/{_DATASET_REPO}",
+            method="HEAD",
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return 200 <= resp.status < 300
+    except urllib.error.HTTPError:
+        # 429, 403, 404 — all mean "tests would fail when fetching", so skip.
+        return False
+    except (urllib.error.URLError, OSError, TimeoutError):
         return False
 
 
 pytestmark = pytest.mark.skipif(
     not _has_hf_network(),
-    reason="HF Hub unreachable from this environment; skipping wire test",
+    reason=(
+        "HF Hub unreachable or rate-limited from this environment; "
+        "skipping wire test"
+    ),
 )
 
 
