@@ -154,7 +154,7 @@ RecordType = Literal[
 # Reasoning Harness enforces structured output and evidence-binding.
 # audit_harness is intentionally absent: the audit trail is not itself
 # a harness writer here, it is the substrate.
-HarnessName = Literal["input", "action", "reasoning"]
+HarnessName = Literal["input", "action", "reasoning", "orchestration"]
 
 
 # ============================================================
@@ -181,7 +181,17 @@ HarnessRecordType = Literal[
     "tool_call_policy_check",     # Action Harness — per-call scope verdict
     "gate_verdict",               # Action Harness — final recommendation gate
     "reasoning_check",            # Reasoning Harness — structured-output pre-emit
+    "orchestration_check",        # Orchestration Harness — cycle-level transition
 ]
+
+
+# ============================================================
+# OrchestrationCheckName — what an Orchestration Harness row asserts
+# ============================================================
+# One value for now; reserved Literals for the 11b+ orchestration checks
+# (validate_specialists_completed, should_proceed_to_evaluator) are
+# deliberately omitted here and will land alongside the specialists.
+OrchestrationCheckName = Literal["cycle_completion_legitimate"]
 
 
 # ============================================================
@@ -208,6 +218,7 @@ FailureStage = Literal[
     "specialist",
     "evaluator",
     "gate",
+    "orchestration",
 ]
 
 
@@ -285,5 +296,6 @@ OP_TYPES: frozenset[str] = frozenset(get_args(OpType))
 HARNESS_NAMES: frozenset[str] = frozenset(get_args(HarnessName))
 VERDICTS: frozenset[str] = frozenset(get_args(Verdict))
 HARNESS_RECORD_TYPES: frozenset[str] = frozenset(get_args(HarnessRecordType))
+ORCHESTRATION_CHECK_NAMES: frozenset[str] = frozenset(get_args(OrchestrationCheckName))
 FAILURE_STAGES: frozenset[str] = frozenset(get_args(FailureStage))
 SUPERVISOR_DECISION_TYPES: frozenset[str] = frozenset(get_args(SupervisorDecisionType))

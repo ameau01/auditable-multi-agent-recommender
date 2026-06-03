@@ -99,3 +99,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Documentation
 - `docs/audit-trail.md`, `docs/harnesses.md`, `ARCHITECTURE.md`
+
+## [Orchestration Harness] implementation
+
+### Changed.
+- update enums and audit.py
+
+### Added.
+- Add orchestration.py the fourth harness.
+
+### Documentation
+`docs/harnesses.md`

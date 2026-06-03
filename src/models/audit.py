@@ -365,6 +365,28 @@ class ReasoningCheckContent(BaseModel):
     model_config = _LenientConfig
 
 
+class OrchestrationCheckContent(BaseModel):
+    """content for type='orchestration_check'. The Orchestration Harness
+    records one of these per cycle-level transition check. In Phase
+    11a.4 there is exactly one such check, `cycle_completion_legitimate`,
+    which fires immediately before `cycle_completed` is written and
+    validates that the terminal_state is consistent with what actually
+    happened in the cycle. Phase 11b+ will add additional checks at
+    other transition points (e.g. validate_specialists_completed,
+    should_proceed_to_evaluator).
+
+    `check_name` distinguishes the specific check. `details` carries
+    the input snapshot the check evaluated (final_status, failed_at_stage,
+    specialists_invoked) so the verdict is reproducible from the row
+    alone without joining audit_records.
+    """
+    check_name: str
+    target_event_type: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+    failure_reason: str | None = None
+    model_config = _LenientConfig
+
+
 # ============================================================
 # Section 5 — Base record models (one row each)
 # ============================================================

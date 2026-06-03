@@ -6,14 +6,14 @@ This document details what each harness provides, where it applies, and why it h
 
 ## The four harnesses at a glance
 
-| Harness                  | Core Capability                                                                    | Where it applies                                           |
-| ------------------------ | ---------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| Input Harness            | Schema validation and review trigger verification.                                 | Bundle ingestion (prior to any agent reasoning).           |
-| Reasoning Harness        | Structured evidence-binding, two-level confidence scoring, and trade-off analysis. | During all specialist ReAct cycles and Evaluator turns.    |
-| Action Harness           | Read-only tool surface enforcement and final recommendation gating.                | Wrapping every tool execution and final output generation. |
-| Persistent Action Record | Append-only audit trail enabling replayable reasoning chains.                      | System-wide (written to continuously across all stages).   |
+| Harness                  | Core Capability                                                                    | Where it applies                                                |
+| ------------------------ | ---------------------------------------------------------------------------------- | --------------------------------------------------------------- |
+| Input Harness            | Schema validation and review trigger verification.                                 | Bundle ingestion (prior to any agent reasoning).                |
+| Reasoning Harness        | Structured evidence-binding, two-level confidence scoring, and trade-off analysis. | During all specialist ReAct cycles and Evaluator turns.         |
+| Action Harness           | Read-only tool surface enforcement and final recommendation gating.                | Wrapping every tool execution and final output generation.      |
+| Orchestration Harness    | Cycle-level transition validation (no agent owns the cycle's overall shape).       | At cycle completion; future: Evaluator-readiness gate.          |
 
-The harnesses are layered, not nested. A single agent invocation may interact with all four: the Input Harness validated its inputs, the Reasoning Harness shapes its reasoning and output, the Action Harness gates its tool calls, and the Persistent Action Record logs every step.
+Every verdict from any harness lands in the same `harness_trail` table; see [`audit-trail.md`](audit-trail.md) for the schema and the substance / enforcement split. The harnesses are layered, not nested. A single agent invocation may interact with all four: the Input Harness validated its inputs, the Reasoning Harness shapes its reasoning and output, the Action Harness gates its tool calls, and the Orchestration Harness validates the cycle-level transitions surrounding the invocation.
 
 ## 1. Input Harness
 
@@ -198,7 +198,36 @@ Inflating the Action Harness to look bigger would dilute the system's identity. 
 - Gate the Evaluator's synthesis content. The Reasoning Harness shapes that. The Action Harness only checks the resulting review packet for completeness and classification.
 - Enforce role-based access control. Role-based filtering is out of scope for a system that produces recommendations for a single human reviewer per review.
 
-## 4. Persistent Action Record
+## 4. Orchestration Harness
+
+**What it provides.** Validation of *cycle-level* transitions — events that no single agent owns because they are about the cycle's overall shape rather than any one agent's decision. Where the other three harnesses gate fine-grained events (one tool call, one structured output, one trigger validation), the Orchestration Harness gates the moments between phases.
+
+**What it checks today.**
+
+- **`cycle_completion_legitimate`** — fires immediately before the runner writes `cycle_completed`. Confirms the terminal state the runner is about to record is consistent with what actually happened in the cycle. Three rejection categories:
+  1. `terminal_state == "completed"` but no specialists were invoked. A cycle that completes without doing any specialist work is not legitimately "completed" — the correct terminal is `"no_specialists"`.
+  2. `terminal_state == "failed"` but `failed_at_stage` is `None`. Every failure must name its stage so the renderer and the eval scripts can branch on it.
+  3. `terminal_state == "rejected_input"` but `failed_at_stage` is not `"input_harness"`. Only the Input Harness can produce this terminal; any other stage stamping it is a bug.
+
+A rejection coerces the terminal to `"failed"` with `failed_at_stage="orchestration"` and a `failure_reason` quoting the harness verdict, so the rejection is visible in both the audit trail (the failed completion) and the harness trail (the rule that was violated).
+
+**Lifecycle exemption rule.** The `cycle_started` and `cycle_completed` events are exempt from the Reasoning Harness's `decision_evidence_backed` check. `cycle_started` has nothing earlier to cite; `cycle_completed` summarizes the entire spine before it via `failed_at_stage` and `final_status` rather than a discrete `evidence_refs` list. The legitimacy of `cycle_completed` is instead validated by the Orchestration Harness's `cycle_completion_legitimate` check — a deliberate split, not an oversight.
+
+**What it will check at maturity (Phase 11b+).**
+
+- `validate_specialists_completed` — fires before the Cross-Tier Evaluator runs; confirms every specialist the Supervisor dispatched produced a finding before synthesis is attempted.
+- `should_proceed_to_evaluator` — at the Supervisor's synthesize decision; gates premature handoff when specialist evidence is too thin to support synthesis.
+
+These are deliberately deferred to 11b because they require specialists to exist; the scaffolding (harness namespace, route() method, harness_trail rows with `harness="orchestration"`) is in place now so they land *into* a four-harness model rather than requiring one to be retrofitted.
+
+**Why it is its own harness.** Cycle-level transitions are inherently cross-agent: no single agent owns whether a cycle should complete, whether the Evaluator should run, or whether a particular transition is valid given what came before. Putting these checks inside any one agent (the Supervisor, say) would mean that agent is gating itself — which loses the property that every verdict has an external referee. The Orchestration Harness is that referee.
+
+**What it does not do.**
+
+- It does not orchestrate. The Supervisor is the only router; the Orchestration Harness only *validates* the transitions the Supervisor decides on.
+- It does not gate individual agent outputs. Those are the Reasoning Harness's job.
+
+## 5. The audit trail (substrate, not a harness)
 
 **What it provides.** An append-only audit trail across every agent and every decision, supporting deterministic replay of any recommendation back to its evidence chain.
 
@@ -241,6 +270,6 @@ The harnesses are independent in scope but cooperative in practice. A representa
 
 A Compute Analyst invokes a tool call to detect threshold breaches on `cpu_p95`. The Action Harness validates that this read operation is in the Compute Analyst's scope (it is). The tool call runs and returns results. The Reasoning Harness requires that any conclusion citing this tool call include the call as an `evidence_ref`. The Persistent Action Record logs the tool call's intent and result to `audit_records` (the substance the agent saw), the Action Harness's policy-check verdict to `harness_trail` (the enforcement record), and when the specialist concludes, the finding citing this evidence lands back in `audit_records`. Three writes across two tables, one tool call.
 
-Four harnesses, one tool call, four properties enforced: scope (Action Harness), evidence-binding (Reasoning Harness), audit (Persistent Action Record), and, implicitly, the assurance that the tool call's inputs were valid (Input Harness validated them at bundle ingest).
+Four harnesses, one tool call, four properties enforced: scope (Action Harness), evidence-binding (Reasoning Harness), cycle-level legitimacy (Orchestration Harness, which will later gate "should we now run the Evaluator on these findings?"), and, implicitly, the assurance that the tool call's inputs were valid (Input Harness validated them at bundle ingest). Every verdict — from any harness — lands in the same `harness_trail` table, parallel to the substance writes in `audit_records`.
 
 This is what "structure, safety, and observability" means in practice. Not five defenses against five threats, but four properties enforced uniformly across the system.

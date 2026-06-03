@@ -86,10 +86,11 @@ def test_agents_run_with_valid_app_produces_expected_trail(
     assert sup_rows[-1].content["terminal_state"] == "no_specialists"
 
     # Harness rows: 2 input_validation (passed), 2 tool_call_policy_check
-    # (passed), 3 reasoning_check decision_evidence_backed (passed): one
-    # for system_mapper_output, two for supervisor_decision. 7 total.
+    # (passed), 3 reasoning_check decision_evidence_backed (passed —
+    # one for system_mapper_output, two for supervisor_decision), 1
+    # orchestration_check cycle_completion_legitimate (passed). 8 total.
     h_events = get_harness_events_for_cycle(store, cycle_id)
-    assert len(h_events) == 7
+    assert len(h_events) == 8
     assert all(h.verdict == "passed" for h in h_events)
     rc = [h for h in h_events if h.type == "reasoning_check"]
     assert len(rc) == 3
@@ -103,6 +104,16 @@ def test_agents_run_with_valid_app_produces_expected_trail(
         "supervisor_decision",
         "system_mapper_output",
     ]
+
+    # Orchestration harness fires once per cycle, just before the runner
+    # writes cycle_completed. The verdict here is 'passed' because a
+    # 'no_specialists' terminal with empty specialists_invoked is one of
+    # the documented legitimate pairings.
+    oc = [h for h in h_events if h.type == "orchestration_check"]
+    assert len(oc) == 1
+    assert oc[0].content["check_name"] == "cycle_completion_legitimate"
+    assert oc[0].content["target_event_type"] == "cycle_completed"
+    assert oc[0].content["details"]["final_status"] == "no_specialists"
 
     # Bug-fix lock-in (Phase 11a.3 follow-up): the system_mapper_output
     # row cites the observation rows it was derived from. With two MCP

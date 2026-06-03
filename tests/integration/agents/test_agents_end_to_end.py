@@ -106,9 +106,10 @@ def test_agents_run_on_app_08_produces_expected_trail() -> None:
 
     # Harness rows: 2 input_validation + 2 tool_call_policy_check + 3
     # reasoning_check decision_evidence_backed (one for system_mapper_output,
-    # two for supervisor_decision), all passed. 7 total.
+    # two for supervisor_decision) + 1 orchestration_check
+    # cycle_completion_legitimate, all passed. 8 total.
     h_events = get_harness_events_for_cycle(store, cycle_id)
-    assert len(h_events) == 7
+    assert len(h_events) == 8
     assert all(h.verdict == "passed" for h in h_events)
 
     # No recommendation row yet (skeleton mode invokes zero specialists).

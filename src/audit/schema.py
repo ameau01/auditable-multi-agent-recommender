@@ -119,7 +119,7 @@ harness_trail = Table(
         server_default=func.current_timestamp(),
     ),
     CheckConstraint(
-        "harness IN ('input', 'action', 'reasoning')",
+        "harness IN ('input', 'action', 'reasoning', 'orchestration')",
         name="ck_harness_trail_harness",
     ),
     CheckConstraint(

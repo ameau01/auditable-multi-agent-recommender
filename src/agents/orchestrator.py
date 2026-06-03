@@ -34,6 +34,7 @@ from langgraph.graph import END, START, StateGraph
 from ..audit.store import AuditStore
 from ..harnesses.action import ActionHarness
 from ..harnesses.input import InputHarness
+from ..harnesses.orchestration import OrchestrationHarness
 from ..harnesses.reasoning import ReasoningHarness
 from ..models.audit import AuditRecord
 from .state import CycleState
@@ -123,13 +124,23 @@ def _make_supervisor_node(
     return node
 
 
-def _make_cycle_complete_node():
-    """Decide the final terminal_state and write it onto the state.
+def _make_cycle_complete_node(orchestration_harness: OrchestrationHarness):
+    """Decide the final terminal_state and route it through the
+    Orchestration Harness's `cycle_completion_legitimate` check before
+    the runner writes `cycle_completed`.
 
     Note: this node does NOT call AuditStore.complete_cycle. The
     runner owns the start/complete pair so the call brackets the
     graph execution; this means cycle_completed lands even if a
     node raises an uncaught exception inside the graph.
+
+    On orchestration-check rejection: the harness has already written
+    the rejected verdict to harness_trail, and we coerce the
+    terminal_state to 'failed' with stage='orchestration' so the
+    `cycle_completed` row the runner writes reflects the harness's
+    refusal. This makes the rejection visible in both the audit trail
+    (substance: the failed completion) and the harness trail (the
+    enforcement: which rule was violated).
     """
     def node(state: CycleState) -> dict[str, Any]:
         if state.terminal_state in ("rejected_input", "failed"):
@@ -153,6 +164,20 @@ def _make_cycle_complete_node():
             final = "completed"
             reason = None
             stage = None
+
+        # Cycle-level legitimacy check via the Orchestration Harness.
+        check = orchestration_harness.check_cycle_completion_legitimate(
+            cycle_id=state.cycle_id,
+            final_status=final,
+            failed_at_stage=stage,
+            specialists_invoked=list(state.specialists_invoked),
+            related_event_id=None,
+        )
+        if not check.passed:
+            final = "failed"
+            reason = f"orchestration_harness: {check.failure_reason}"
+            stage = "orchestration"
+
         return {
             "terminal_state": final,
             "failure_reason": reason,
@@ -211,6 +236,7 @@ def build_graph(
     input_harness: InputHarness,
     action_harness: ActionHarness,
     reasoning_harness: ReasoningHarness | None = None,
+    orchestration_harness: OrchestrationHarness | None = None,
 ):
     """Build and compile the LangGraph application for one cycle.
 
@@ -218,12 +244,15 @@ def build_graph(
     drives the cycle. Construct fresh per cycle; LangGraph's state is
     per-invocation, not per-graph.
 
-    `reasoning_harness` defaults to a fresh `ReasoningHarness(store)` —
-    callers that already hold a long-lived ReasoningHarness can pass it
-    in, but for normal use the default is right.
+    `reasoning_harness` and `orchestration_harness` default to fresh
+    instances bound to the same `store` — callers that hold long-lived
+    harnesses can pass them in, but for normal use the defaults are
+    right.
     """
     if reasoning_harness is None:
         reasoning_harness = ReasoningHarness(store)
+    if orchestration_harness is None:
+        orchestration_harness = OrchestrationHarness(store)
 
     graph: StateGraph = StateGraph(CycleState)
 
@@ -241,7 +270,7 @@ def build_graph(
     )
     graph.add_node(
         "cycle_complete",
-        _make_cycle_complete_node(),
+        _make_cycle_complete_node(orchestration_harness),
     )
 
     graph.add_edge(START, "input_validation")
