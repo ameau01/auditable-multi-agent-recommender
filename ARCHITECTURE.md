@@ -64,11 +64,11 @@ flowchart TB
     class TR,RP,H terminus
 ```
 
-*Blue boxes are agents; oval endpoints are external boundaries (trigger in, deliverable out, human review). MCP scenario data and the four harnesses are cross-cutting concerns covered by the diagrams further down.*
+*Blue boxes are agents; oval endpoints are external boundaries (trigger in, deliverable out, human review). The four harnesses are cross-cutting concerns covered by the next section; the data layer that specialists query is documented separately in [docs/mcp-server.md](docs/mcp-server.md).*
 
 **Reading the diagram.** The vertical sequence — trigger, Supervisor, three tier-bounded Specialists in parallel, Cross-Tier Evaluator, Review Packet, Human-in-the-loop — is the conceptual flow of one review cycle. The Supervisor fans out to the three Specialists whose tiers the System Mapper detected; their findings fan back in to the Cross-Tier Evaluator for drift-check and synthesis. The fan-out / fan-in shape is the coordination story — many independent specialist agents, one synthesized conclusion. System Mapper sits perpendicular because the Supervisor dispatches it once per cycle to map the application's tier graph, then control returns to the Supervisor — it's a worker the Supervisor calls, not a stage in the pipeline.
 
-**Supervisor is the only router.** Although the diagram draws the sequence as a vertical chain, the implementation routes every transition through the Supervisor: Supervisor decides whether to call System Mapper, which specialists to dispatch, when to synthesize via the Evaluator, when to hand the synthesized recommendation onward to the Action Harness gate (see the next section), and crucially — when to terminate the cycle. Every worker node returns to the Supervisor between stages; no worker can decide "we're done" on its own. The downward arrows are the conceptual sequence; the routing loop through the Supervisor is left implicit to keep the diagram readable.
+**Supervisor is the only router.** Although the diagram draws the sequence as a vertical chain, the implementation routes every transition through the Supervisor: Supervisor decides whether to call System Mapper, which specialists to dispatch, when to synthesize via the Evaluator, when to hand the synthesized recommendation onward to the Action Harness gate (see the next section), and crucially — when to terminate the cycle. Every worker node returns to the Supervisor between stages; no worker can decide "we're done" on its own. The downward arrows are the conceptual sequence; the routing loop through the Supervisor is left implicit to keep the diagram readable. This is a conceptual narrative of the reasoning structure — the actual control flow and state transitions are handled by LangGraph underneath.
 
 Every arrow crosses one or more harnesses — the next section describes them. Note that this is a logical topology, not a microservice deployment diagram. For this portfolio implementation, the system runs as a single Python process; the architectural boundaries are strictly logical, not infrastructural.
 
@@ -100,48 +100,6 @@ flowchart TB
 ```
 
 The harnesses are cross-cutting concerns, not a sequential pipeline — each fires at a different kind of event during one cycle. Every verdict (passed, rejected, flagged, info) lands in `harness_trail`, keyed by `check_name` and linked to the audit row it judged via `related_event_id`. The agent's substance — what it decided and what evidence it cited — lives in a separate table, `audit_records`. The two tables together let a reader reconstruct both the decision report (substance) and the enforcement report (verdicts) for any cycle. See `docs/audit-trail.md` for the table-level model and `docs/harnesses.md` for what each harness checks.
-
-## End-to-end Flow
-
-```mermaid
-flowchart TB
-    T["Trigger<br/>Review request: app-name + optional alert description"]
-    IH["Input Harness<br/>Validates scenario data & logs scenario hash"]
-
-    SM["System Mapper<br/>Parses Terraform & generates analysis plan"]
-    SUP["Supervisor Agent<br/>Orchestrates & routes to required specialists"]
-
-    subgraph Specialists ["Parallel Specialist Analysis"]
-        direction TB
-        CA["Compute Analyst<br/>Executes ReAct in compute scope"]
-        DA["Data Layer Analyst<br/>Executes ReAct in data layer scope"]
-        NA["Network Analyst<br/>Executes ReAct in network scope"]
-    end
-
-    EV["Cross-Tier Evaluator<br/>Reconciles drift, maps interactions & scores trade-offs"]
-    AH["Action Harness<br/>Gates recommendation (validates evidence, severity & duplication)"]
-    HITL["Human-in-the-Loop (HITL)<br/>Approves, rejects, or defers"]
-  
-    %% Database node shape for the PAR
-    PAR[("Persistent Action Record<br/>Append-only log across all stages")]
-
-    %% Main Execution Flow
-    T --> IH --> SM --> SUP
-    SUP --> CA & DA & NA --> EV
-    EV --> AH --> HITL
-
-    %% Audit Logging Flow
-    IH -.-> PAR
-    SM -.-> PAR
-    SUP -.-> PAR
-    CA -.-> PAR
-    DA -.-> PAR
-    NA -.-> PAR
-    EV -.-> PAR
-    AH -.-> PAR
-    HITL -.-> PAR
-```
-A review initiates with a lightweight trigger naming the target app and an optional alert description. The Supervisor pulls the initial package to plan the review, then specialists pull their tier's telemetry through the MCP surface as they reason. The Persistent Action Record captures state at every transition. The full reasoning chain, from trigger to final synthesis, can be reconstructed from the audit trail. Note that this diagram describes the conceptual reasoning structure, not a strict state-machine specification. Frameworks like LangGraph handle the actual control flow and state transitions underneath.
 
 ## Tier Specialist: the ReAct loop
 
@@ -193,14 +151,14 @@ flowchart TB
 
 ## Where Each Harness Applies
 
-| Execution Stage | Input Harness | Reasoning Harness | Action Harness | Persistent Action Record |
-| --- | --- | --- | --- | --- |
-| **Trigger & Ingest** | Validates scenario data: schema, completeness, timestamp continuity | - | - | Logs trigger & scenario hash |
-| **System Mapper** | Validates Terraform parsing | Enforces architecture model schema | - | Logs architecture model & analysis plan |
-| **Supervisor Decisions** | - | - | - | Logs routing & invocation decisions |
-| **Tier Specialist ReAct** | - | Enforces structured reasoning, evidence binding & confidence scoring | Scopes the MCP read surface to the specialist's tier | Logs every tool call & reasoning step |
-| **Cross-Tier Evaluator** | - | Enforces drift-check, synthesis & trade-off scoring | - | Logs drift verdicts, scores & synthesis |
-| **Final Recommendation Gate** | - | - | Gates well-formedness, evidence, severity & duplication | Logs final gate verdict |
-| **HITL Decision** | - | - | - | Logs human approval, rejection, or deferral |
+| Execution Stage | Input Harness | Reasoning Harness | Action Harness | Orchestration Harness | Audit Trail |
+| --- | --- | --- | --- | --- | --- |
+| **Trigger & Ingest** | Validates scenario data: schema, completeness, timestamp continuity | - | - | - | Logs trigger & scenario hash |
+| **System Mapper** | Validates Terraform parsing | Verifies the topology conclusion is evidence-backed | Scopes the MCP read surface to scenario-level tools | - | Logs architecture model & analysis plan |
+| **Supervisor Decisions** | - | Verifies every routing decision cites the evidence it relied on | - | Validates cycle-level transitions are legitimate (no `completed` without specialists; `failed` carries a `failed_at_stage`) | Logs routing & invocation decisions |
+| **Tier Specialist ReAct** | - | Enforces structured reasoning, evidence binding & confidence scoring | Scopes the MCP read surface to the specialist's tier | - | Logs every tool call & reasoning step |
+| **Cross-Tier Evaluator** | - | Enforces drift-check, synthesis & trade-off scoring | - | Verifies specialists completed before synthesis runs | Logs drift verdicts, scores & synthesis |
+| **Final Recommendation Gate** | - | - | Gates well-formedness, evidence, severity & duplication | - | Logs final gate verdict |
+| **HITL Decision** | - | - | - | - | Logs human approval, rejection, or deferral |
 
-The Reasoning Harness carries the heaviest cognitive load. The Action Harness remains intentionally narrow. The Persistent Action Record maintains state across the entire lifecycle. The Input Harness acts strictly as the front door.
+The Reasoning Harness carries the heaviest cognitive load. The Action Harness remains intentionally narrow. The Orchestration Harness gates the cycle-level transitions that no single agent owns. The audit trail — split across `audit_records` for agent substance and `harness_trail` for harness verdicts — maintains state across the entire lifecycle. The Input Harness acts strictly as the front door.
