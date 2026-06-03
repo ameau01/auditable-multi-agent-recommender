@@ -38,7 +38,7 @@ import re
 import sys
 from pathlib import Path
 
-from .evaluator import Evaluator
+from .evaluator import Scorer
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -153,9 +153,9 @@ def main():
                       f"Falling back to deterministic-only scoring.",
                       file=sys.stderr)
 
-    # ---- load evaluator ----
+    # ---- load scorer ----
     try:
-        evaluator = Evaluator.from_eval_set_dir(
+        scorer = Scorer.from_eval_set_dir(
             DEFAULT_EVAL_SET_DIR,
             dataset_examples_dir=DEFAULT_DATASET_EXAMPLES_DIR,
             judge=judge,
@@ -165,15 +165,15 @@ def main():
         sys.exit(2)
 
     # ---- check scenario id is known ----
-    if scenario_id not in evaluator.scenario_ids:
-        known_apps = ", ".join(f"app-{s}" for s in evaluator.scenario_ids)
+    if scenario_id not in scorer.scenario_ids:
+        known_apps = ", ".join(f"app-{s}" for s in scorer.scenario_ids)
         print(f"ERROR: unknown app {args.app_name!r}. "
               f"Known apps: {known_apps}",
               file=sys.stderr)
         sys.exit(2)
 
     # ---- score ----
-    result = evaluator.score_one(scenario_id, prediction)
+    result = scorer.score_one(scenario_id, prediction)
 
     # ---- render ----
     print()

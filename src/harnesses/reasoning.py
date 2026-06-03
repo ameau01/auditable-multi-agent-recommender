@@ -30,6 +30,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import select
+
+from ..audit.schema import audit_records
 from ..audit.store import AuditStore
 from ..models.audit import HarnessRecord
 from ..models.enums import Verdict
@@ -78,7 +81,7 @@ class ReasoningHarness:
     # ----------------------------------------------------------------
     def check_finding_type(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
         finding_payload: dict[str, Any],
         related_event_id: int | None = None,
     ) -> ReasoningCheckResult:
@@ -89,8 +92,8 @@ class ReasoningHarness:
         check_name = "finding_type_three_valued"
         finding_type = finding_payload.get("finding_type")
         if finding_type in _VALID_FINDING_TYPES:
-            return self._emit(
-                review_cycle_id=review_cycle_id,
+            return self.route(
+                cycle_id=cycle_id,
                 check_name=check_name,
                 target_event_type="specialist_finding",
                 related_event_id=related_event_id,
@@ -98,8 +101,8 @@ class ReasoningHarness:
                 details={"finding_type": finding_type},
                 failure_reason=None,
             )
-        return self._emit(
-            review_cycle_id=review_cycle_id,
+        return self.route(
+            cycle_id=cycle_id,
             check_name=check_name,
             target_event_type="specialist_finding",
             related_event_id=related_event_id,
@@ -116,7 +119,7 @@ class ReasoningHarness:
     # ----------------------------------------------------------------
     def check_evidence_refs_minimum(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
         finding_payload: dict[str, Any],
         minimum: int = 1,
         related_event_id: int | None = None,
@@ -133,8 +136,8 @@ class ReasoningHarness:
 
         # Only issue_found findings need to meet the threshold.
         if finding_type != "issue_found":
-            return self._emit(
-                review_cycle_id=review_cycle_id,
+            return self.route(
+                cycle_id=cycle_id,
                 check_name=check_name,
                 target_event_type="specialist_finding",
                 related_event_id=related_event_id,
@@ -149,8 +152,8 @@ class ReasoningHarness:
             )
 
         if len(evidence_refs) >= minimum:
-            return self._emit(
-                review_cycle_id=review_cycle_id,
+            return self.route(
+                cycle_id=cycle_id,
                 check_name=check_name,
                 target_event_type="specialist_finding",
                 related_event_id=related_event_id,
@@ -162,8 +165,8 @@ class ReasoningHarness:
                 },
                 failure_reason=None,
             )
-        return self._emit(
-            review_cycle_id=review_cycle_id,
+        return self.route(
+            cycle_id=cycle_id,
             check_name=check_name,
             target_event_type="specialist_finding",
             related_event_id=related_event_id,
@@ -184,7 +187,7 @@ class ReasoningHarness:
     # ----------------------------------------------------------------
     def check_evaluator_drift_verdicts(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
         evaluator_payload: dict[str, Any],
         related_event_id: int | None = None,
     ) -> ReasoningCheckResult:
@@ -200,8 +203,8 @@ class ReasoningHarness:
             if v not in _VALID_DRIFT_VERDICTS
         ]
         if not invalid:
-            return self._emit(
-                review_cycle_id=review_cycle_id,
+            return self.route(
+                cycle_id=cycle_id,
                 check_name=check_name,
                 target_event_type="evaluator_record",
                 related_event_id=related_event_id,
@@ -209,8 +212,8 @@ class ReasoningHarness:
                 details={"verdict_count": len(drift)},
                 failure_reason=None,
             )
-        return self._emit(
-            review_cycle_id=review_cycle_id,
+        return self.route(
+            cycle_id=cycle_id,
             check_name=check_name,
             target_event_type="evaluator_record",
             related_event_id=related_event_id,
@@ -226,11 +229,141 @@ class ReasoningHarness:
         )
 
     # ----------------------------------------------------------------
-    # Internal: emit and return
+    # Decision evidence-backing (Supervisor + future routers)
     # ----------------------------------------------------------------
-    def _emit(
+    def check_decision_evidence_backed(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
+        decision_payload: dict[str, Any],
+        related_event_id: int | None = None,
+        record_type: str = "supervisor_decision",
+    ) -> ReasoningCheckResult:
+        """Confirm every decision is backed by evidence the cycle owns.
+
+        Three rejection categories:
+          - missing  : evidence_refs absent or empty.
+          - dangling : a cited id has no audit_records row at all.
+          - foreign  : a cited id exists but belongs to a different cycle.
+
+        On pass: writes a `passed` reasoning_check row and returns
+        ReasoningCheckResult(passed=True). The caller (typically the
+        Supervisor) should treat a failed check as a routing block — the
+        decision must not be acted on.
+
+        Design rationale: the audit trail's "every claim traces to an
+        observation" property requires every routing decision to cite
+        the evidence it relied on. This check enforces that property at
+        decision time, not gate time — so a decision that lacks evidence
+        never gets to act.
+        """
+        check_name = "decision_evidence_backed"
+        # The harness_trail row records the audit RecordType the decision
+        # will be written as ("supervisor_decision" vs
+        # "system_mapper_output"). The caller passes it explicitly so a
+        # reader of harness_trail can distinguish what was verified
+        # without joining audit_records. The supervisor's *decision_type*
+        # ("dispatch_system_mapper" / "complete") is a sub-categorization
+        # of supervisor_decision and stays in audit_records.content.
+        target_event_type = record_type
+        evidence_refs = decision_payload.get("evidence_refs") or []
+
+        # Category 1: missing.
+        if not evidence_refs:
+            return self.route(
+                cycle_id=cycle_id,
+                check_name=check_name,
+                target_event_type=target_event_type,
+                related_event_id=related_event_id,
+                verdict="rejected",
+                details={
+                    "decision_type": decision_payload.get("decision_type"),
+                    "evidence_refs": [],
+                    "rejection_category": "missing",
+                },
+                failure_reason=(
+                    "decision has no evidence_refs; every routing decision "
+                    "must cite at least one audit_records id it relied on."
+                ),
+            )
+
+        # Resolve all cited ids in one query and bucket by category.
+        with self._store.engine.connect() as conn:
+            rows = conn.execute(
+                select(audit_records.c.id, audit_records.c.cycle_id)
+                .where(audit_records.c.id.in_(evidence_refs))
+            ).fetchall()
+        present: dict[int, str] = {int(r[0]): r[1] for r in rows}
+
+        dangling = [rid for rid in evidence_refs if rid not in present]
+        foreign = [
+            rid for rid in evidence_refs
+            if rid in present and present[rid] != cycle_id
+        ]
+
+        if dangling:
+            return self.route(
+                cycle_id=cycle_id,
+                check_name=check_name,
+                target_event_type=target_event_type,
+                related_event_id=related_event_id,
+                verdict="rejected",
+                details={
+                    "decision_type": decision_payload.get("decision_type"),
+                    "evidence_refs": list(evidence_refs),
+                    "dangling_refs": dangling,
+                    "rejection_category": "dangling",
+                },
+                failure_reason=(
+                    f"{len(dangling)} evidence_ref(s) do not resolve to any "
+                    f"audit_records row: {dangling}."
+                ),
+            )
+        if foreign:
+            return self.route(
+                cycle_id=cycle_id,
+                check_name=check_name,
+                target_event_type=target_event_type,
+                related_event_id=related_event_id,
+                verdict="rejected",
+                details={
+                    "decision_type": decision_payload.get("decision_type"),
+                    "evidence_refs": list(evidence_refs),
+                    "foreign_refs": foreign,
+                    "rejection_category": "foreign",
+                },
+                failure_reason=(
+                    f"{len(foreign)} evidence_ref(s) belong to a different "
+                    f"cycle: {foreign}. Decisions can only cite evidence "
+                    "from their own cycle."
+                ),
+            )
+
+        return self.route(
+            cycle_id=cycle_id,
+            check_name=check_name,
+            target_event_type=target_event_type,
+            related_event_id=related_event_id,
+            verdict="passed",
+            details={
+                "decision_type": decision_payload.get("decision_type"),
+                "evidence_refs": list(evidence_refs),
+                "verified_count": len(evidence_refs),
+            },
+            failure_reason=None,
+        )
+
+    # ----------------------------------------------------------------
+    # Public: route a verdict through the harness
+    # ----------------------------------------------------------------
+    # Public on purpose. The Supervisor (and future callers) route their
+    # decisions through this method so the decision lands as a
+    # `harness_trail` row with a Reasoning Harness verdict attached.
+    # "Route" matches the LangGraph vocabulary — moving a verdict from
+    # one place to the next, as opposed to "emit" which in LangGraph
+    # specifically denotes streaming Pregel events.
+    def route(
+        self,
+        cycle_id: str,
         check_name: str,
         target_event_type: str,
         related_event_id: int | None,
@@ -239,7 +372,7 @@ class ReasoningHarness:
         failure_reason: str | None,
     ) -> ReasoningCheckResult:
         record = HarnessRecord(
-            review_cycle_id=review_cycle_id,
+            cycle_id=cycle_id,
             parent_id=None,
             related_event_id=related_event_id,
             harness="reasoning",

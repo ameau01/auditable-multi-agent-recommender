@@ -140,7 +140,7 @@ def test_empty_drift_verdicts_passes_vacuously(
 # ============================================================
 # Every check writes one harness row
 # ============================================================
-def test_each_call_emits_one_row(store: AuditStore, cycle_id: str) -> None:
+def test_each_call_produces_one_row(store: AuditStore, cycle_id: str) -> None:
     h = ReasoningHarness(store)
     h.check_finding_type(cycle_id, {"finding_type": "issue_found"})
     h.check_evidence_refs_minimum(cycle_id, {"finding_type": "issue_found",

@@ -92,9 +92,14 @@ data/smoke_test/
 data/final/*.jsonl
 
 
-# --- LangSmith / LlamaIndex caches ---
+# --- LangSmith / LangGraph / LlamaIndex caches ---
 .llama_index/
 .langsmith/
+# `langgraph dev` writes its API server state here (checkpoints, run logs).
+.langgraph_api/
+# Mermaid graph exports from `app.get_graph().draw_mermaid()` are derived
+# artifacts — the canonical diagram lives in ARCHITECTURE.md.
+*.mmd
 
 # --- pgvector / docker volumes ---
 pgdata/

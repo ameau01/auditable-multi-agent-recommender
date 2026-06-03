@@ -52,41 +52,44 @@ def main() -> int:
         print(f"  Started cycle: {cid}")
 
         rec_request_id = store.add_event(AuditRecord(
-            review_cycle_id=cid, parent_id=1,
+            cycle_id=cid, parent_id=1,
             category="decision", type="review_request", agent="input_harness",
             content={"application_id": "app-08", "trigger_source": "smoke"},
         ))
 
         sup_id = store.add_event(AuditRecord(
-            review_cycle_id=cid, parent_id=rec_request_id,
+            cycle_id=cid, parent_id=rec_request_id,
             category="decision", type="supervisor_decision", agent="supervisor",
-            content={"decision_type": "invoke_specialist",
-                     "decision_details": {"specialists": ["compute_analyst"]}},
+            content={"decision_type": "dispatch_specialists",
+                     "targets": ["compute_analyst"],
+                     "reason": "Smoke fixture dispatches compute_analyst.",
+                     "evidence_refs": [],
+                     "decision_details": {}},
         ))
 
         tool_id = store.add_event(AuditRecord(
-            review_cycle_id=cid, parent_id=sup_id,
+            cycle_id=cid, parent_id=sup_id,
             category="evidence", type="tool_call", agent="compute_analyst",
             content={"tool_name": "get_summary_statistics",
                      "arguments": {"app_name": "app-08", "tier": "compute", "metric": "cpu_p95"}},
         ))
 
         obs_id = store.add_event(AuditRecord(
-            review_cycle_id=cid, parent_id=tool_id,
+            cycle_id=cid, parent_id=tool_id,
             category="evidence", type="observation", agent="compute_analyst",
             content={"tool_name": "get_summary_statistics",
                      "result": {"statistics": {"mean": 19.2, "p95": 27.1}}},
         ))
 
         finding_id = store.add_event(AuditRecord(
-            review_cycle_id=cid, parent_id=sup_id,
+            cycle_id=cid, parent_id=sup_id,
             category="decision", type="specialist_finding", agent="compute_analyst",
             content={"specialist": "compute_analyst", "finding_type": "no_issue_found",
                      "headline": "Compute is healthy", "evidence_refs": [obs_id]},
         ))
 
         eval_id = store.add_event(AuditRecord(
-            review_cycle_id=cid, parent_id=finding_id,
+            cycle_id=cid, parent_id=finding_id,
             category="decision", type="evaluator_record", agent="cross_tier_evaluator",
             content={"synthesis": {"verdict": "no action"}, "evidence_refs": [obs_id]},
         ))
@@ -111,7 +114,7 @@ def main() -> int:
             },
         }
         rec_id = store.add_event(AuditRecord(
-            review_cycle_id=cid, parent_id=eval_id,
+            cycle_id=cid, parent_id=eval_id,
             category="decision", type="recommendation", agent="supervisor",
             content={"composite": composite_data, "evidence_refs": [obs_id]},
         ))

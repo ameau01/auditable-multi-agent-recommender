@@ -18,7 +18,7 @@ universes. Two load modes:
 Validation runs at load time. Drift between rules files and enums.py
 fails loud (raises ValueError) rather than silently producing wrong scores.
 
-The Evaluator's primary loader is now `Evaluator.from_eval_set_dir()`,
+The Scorer's primary loader is now `Scorer.from_eval_set_dir()`,
 which reads composites and calls `validate_rules()` on each one's
 `to_rules_dict()` output. The `load_rules_file` / `load_rules_dir`
 functions remain available for tests and ad-hoc rules dicts.
@@ -55,7 +55,7 @@ def load_rules_dir(rules_dir: Path | str) -> dict[str, dict]:
     Returns a dict keyed by scenario id (NN, two-digit string), where each
     value is the parsed and validated rules dict.
 
-    Used by the Evaluator class to preload all per-scenario rules at init
+    Used by the Scorer class to preload all per-scenario rules at init
     so subsequent scoring calls don't re-read JSON from disk.
     """
     rules_dir = Path(rules_dir)

@@ -30,7 +30,7 @@ def test_start_cycle_returns_cycle_id(store: AuditStore) -> None:
 def test_add_event_inserts_and_returns_id(store: AuditStore) -> None:
     cid = store.start_cycle(application_id="app-08")
     rec = AuditRecord(
-        review_cycle_id=cid, parent_id=1,
+        cycle_id=cid, parent_id=1,
         category="evidence", type="tool_call", agent="compute_analyst",
         content={"tool_name": "get_summary_statistics"},
     )
@@ -45,7 +45,7 @@ def test_complete_cycle_writes_end_tag(store: AuditStore) -> None:
     assert end_id > 0
     with store.engine.connect() as conn:
         rows = conn.execute(
-            text("SELECT type FROM audit_records WHERE review_cycle_id = :c ORDER BY id"),
+            text("SELECT type FROM audit_records WHERE cycle_id = :c ORDER BY id"),
             {"c": cid},
         ).fetchall()
     types = [r[0] for r in rows]
@@ -86,7 +86,7 @@ def test_pragma_foreign_keys_is_on(store: AuditStore) -> None:
 def test_bogus_parent_id_is_rejected(store: AuditStore) -> None:
     cid = store.start_cycle(application_id="app-08")
     rec = AuditRecord(
-        review_cycle_id=cid, parent_id=999_999,  # does not exist
+        cycle_id=cid, parent_id=999_999,  # does not exist
         category="evidence", type="tool_call", agent="compute_analyst",
         content={"tool_name": "x"},
     )
@@ -101,7 +101,7 @@ def test_duplicate_cycle_started_is_rejected(store: AuditStore) -> None:
     cid = store.start_cycle(application_id="app-08")
     # Attempt to insert a second cycle_started row with the same cycle_id
     rec = AuditRecord(
-        review_cycle_id=cid, parent_id=None,
+        cycle_id=cid, parent_id=None,
         category="decision", type="cycle_started", agent="supervisor",
         content={"application_id": "app-08", "trigger_type": "manual"},
     )
@@ -133,11 +133,11 @@ def test_add_op_event_writes_to_internal_ops(store: AuditStore) -> None:
     rid = store.add_op_event(op_rec)
     assert rid > 0
     with store.engine.connect() as conn:
-        n = conn.execute(text("SELECT COUNT(*) FROM internal_ops")).scalar()
+        n = conn.execute(text("SELECT COUNT(*) FROM operations")).scalar()
     assert n == 1
 
 
-def test_evaluate_recommendation_emits_two_event_chain(store: AuditStore) -> None:
+def test_evaluate_recommendation_produces_two_event_chain(store: AuditStore) -> None:
     cid = store.start_cycle(application_id="app-08")
     op_id = store.evaluate_recommendation(
         target_cycle_id=cid,
@@ -148,7 +148,7 @@ def test_evaluate_recommendation_emits_two_event_chain(store: AuditStore) -> Non
     assert op_id.startswith("eval_")
     with store.engine.connect() as conn:
         rows = conn.execute(
-            text("SELECT type, parent_id FROM internal_ops WHERE op_id = :o ORDER BY id"),
+            text("SELECT type, parent_id FROM operations WHERE op_id = :o ORDER BY id"),
             {"o": op_id},
         ).fetchall()
     types = [r[0] for r in rows]

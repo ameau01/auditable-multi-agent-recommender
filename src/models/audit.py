@@ -5,12 +5,12 @@ in `docs/audit-trail.md`:
 
   - `AuditRecord`     -> audit_records table (the reasoning trail)
   - `HarnessRecord`   -> harness_trail table (enforcement events)
-  - `InternalOpRecord` -> internal_ops table (eval, render — internal)
+  - `InternalOpRecord` -> operations table (eval, render — internal)
 
 Each record's `content` field is a typed Pydantic sub-model whose shape
 is selected by `type`. The content classes are defined below in four
 sections (decision-category content, evidence-category content) for
-audit_records, a section for internal_ops content, and a fourth section
+audit_records, a section for operations content, and a fourth section
 for harness_trail content.
 
 The store layer accepts records as raw dicts at the wire (so producers
@@ -31,12 +31,14 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from .enums import (
     AgentName,
+    FailureStage,
     HarnessName,
     HarnessRecordType,
     OpSubType,
     OpType,
     RecordCategory,
     RecordType,
+    SupervisorDecisionType,
     Tier,
     Verdict,
 )
@@ -66,9 +68,17 @@ class CycleStartedContent(BaseModel):
 
 class CycleCompletedContent(BaseModel):
     """content for type='cycle_completed'. The cycle's end tag.
-    parent_id MUST point to the cycle_started record's id."""
+
+    parent_id MUST point to the cycle_started record's id.
+
+    `failed_at_stage` is the machine-readable counterpart to the prose
+    `failure_reason` — set whenever `final_status != 'completed'` so the
+    renderer can branch on stage without parsing the reason string. On a
+    successful cycle the field is None (there's no failure to attribute).
+    """
     final_status: str                   # "completed" | "failed" | "aborted"
     failure_reason: str | None = None
+    failed_at_stage: FailureStage | None = None
     recommendation_record_id: int | None = None
     model_config = _LenientConfig
 
@@ -81,12 +91,58 @@ class ReviewRequestContent(BaseModel):
     model_config = _LenientConfig
 
 
-class SupervisorDecisionContent(BaseModel):
-    """content for type='supervisor_decision'. Specialist deployment,
-    retry, or escalation choice."""
-    decision_type: str                  # "invoke_specialist" | "retry" | "escalate" | "aggregate"
-    decision_details: dict[str, Any] = Field(default_factory=dict)
+class SystemMapperOutputContent(BaseModel):
+    """content for type='system_mapper_output'. The System Mapper's
+    analysis plan: which tiers the application uses, what specialists
+    should be invoked, and a brief summary of the parsed terraform.
+
+    Kept distinct from supervisor_decision because the Supervisor and
+    the System Mapper play different roles — overloading one record
+    type would lose that signal in the trail.
+    """
+    application_id: str
+    tiers_detected: list[Tier] = Field(default_factory=list)
+    specialists_to_invoke: list[AgentName] = Field(default_factory=list)
+    terraform_resources_summary: str | None = None
+    metadata_summary: dict[str, Any] = Field(default_factory=dict)
+    notes: str | None = None
     evidence_refs: list[int] = Field(default_factory=list)
+    model_config = _LenientConfig
+
+
+class SupervisorDecisionContent(BaseModel):
+    """content for type='supervisor_decision'.
+
+    The Supervisor is the only router in the LangGraph; every transition
+    between worker nodes is one of these decisions. The shape is the same
+    regardless of which downstream node the decision routes to — the
+    `decision_type` discriminates.
+
+    Field contract:
+
+      decision_type   — one of SupervisorDecisionType (see enums.py).
+      targets         — for `dispatch_specialists`, the agent names being
+                        dispatched (e.g. ["compute_analyst", "data_layer_analyst"]).
+                        Empty for non-dispatch decisions.
+      terminal_state  — for `decision_type='complete'`, the cycle's
+                        terminal label ("completed" | "no_specialists" |
+                        "insufficient_data" | etc.). None otherwise.
+      reason          — human-readable explanation of *why* this decision.
+                        Surfaces in the human-rendered report.
+      evidence_refs   — audit_records ids the decision relied on. Required
+                        for every decision; the Reasoning Harness's
+                        `check_decision_evidence_backed` verifies these
+                        resolve to real rows in the same cycle.
+
+    `decision_details` is the catch-all dict for fields the renderer
+    doesn't need to special-case (counters, model temperature, etc.).
+    """
+    decision_type: SupervisorDecisionType
+    targets: list[AgentName] = Field(default_factory=list)
+    terminal_state: str | None = None
+    reason: str
+    evidence_refs: list[int] = Field(default_factory=list)
+    decision_details: dict[str, Any] = Field(default_factory=dict)
     model_config = _LenientConfig
 
 
@@ -193,10 +249,11 @@ class InfrastructureFactContent(BaseModel):
 
 
 # ============================================================
-# Section 3 — Internal_ops content models
+# Section 3 — Operations content models
 # ============================================================
-# These describe content payloads for the second table, internal_ops.
-# Decoupled from audit_records — different audience, different lifecycle.
+# These describe content payloads for the `operations` table (renamed
+# from `internal_ops` in Phase 11a.2). Decoupled from audit_records —
+# different audience, different lifecycle.
 
 
 class JudgeCallContent(BaseModel):
@@ -314,15 +371,19 @@ class ReasoningCheckContent(BaseModel):
 
 
 class AuditRecord(BaseModel):
-    """One row in the audit_records table. The reasoning-trail event."""
+    """One row in the audit_records table. The reasoning-trail event.
+
+    Column names align with the SQL schema: `cycle_id` (was
+    `review_cycle_id` until Phase 11a.2), `timestamp` (was `emitted_at`).
+    """
     id: int | None = None               # populated by SQLite after insert
-    review_cycle_id: str
+    cycle_id: str
     parent_id: int | None = None
     category: RecordCategory
     type: RecordType
     agent: AgentName | None = None
     content: dict[str, Any]             # one of the *Content classes above
-    emitted_at: datetime | None = None  # populated by SQLite default
+    timestamp: datetime | None = None   # populated by SQLite default
 
     model_config = ConfigDict(extra="forbid")
 
@@ -343,21 +404,27 @@ class HarnessRecord(BaseModel):
     a gate_verdict whose sub-checks are individual rows).
     """
     id: int | None = None
-    review_cycle_id: str
+    cycle_id: str
     parent_id: int | None = None
     related_event_id: int | None = None  # FK reference into audit_records.id
     harness: HarnessName
     type: HarnessRecordType
     verdict: Verdict
     content: dict[str, Any]              # one of the harness *Content classes above
-    emitted_at: datetime | None = None
+    timestamp: datetime | None = None
 
     model_config = ConfigDict(extra="forbid")
 
 
 class InternalOpRecord(BaseModel):
-    """One row in the internal_ops table. A post-hoc operation against
-    a completed cycle's recommendation (eval run, report render)."""
+    """One row in the `operations` table (renamed from `internal_ops`
+    in Phase 11a.2). A post-hoc operation against a completed cycle's
+    recommendation (eval run, report render).
+
+    The class name stays `InternalOpRecord` for now — the *table* was
+    renamed for user-visible clarity, but the class name change has a
+    larger blast radius (imports across modules) and isn't user-visible.
+    """
     id: int | None = None
     op_id: str                          # e.g. "eval_20260601_142003_a3f8b1c0"
     op_type: OpType
@@ -366,6 +433,6 @@ class InternalOpRecord(BaseModel):
     parent_id: int | None = None        # self-FK for multi-step ops
     type: OpSubType
     content: dict[str, Any]             # one of the *Content classes above
-    emitted_at: datetime | None = None
+    timestamp: datetime | None = None
 
     model_config = ConfigDict(extra="forbid")

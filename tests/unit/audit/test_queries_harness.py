@@ -22,7 +22,7 @@ from src.models.audit import AuditRecord, HarnessRecord
 
 def _audit_tool_call(cid: str) -> AuditRecord:
     return AuditRecord(
-        review_cycle_id=cid, parent_id=None, category="evidence",
+        cycle_id=cid, parent_id=None, category="evidence",
         type="tool_call", agent="compute_analyst",
         content={"tool_name": "get_time_series", "arguments": {}},
     )
@@ -30,7 +30,7 @@ def _audit_tool_call(cid: str) -> AuditRecord:
 
 def _harness(cid: str, **overrides) -> HarnessRecord:
     base = dict(
-        review_cycle_id=cid,
+        cycle_id=cid,
         parent_id=None,
         related_event_id=None,
         harness="action",

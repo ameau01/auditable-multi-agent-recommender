@@ -8,7 +8,7 @@ Three model groups:
   - JudgeResult: the LLM judge's structured verdict for the richness
     layer.
   - ScoreOneResult: the full five-layer scorecard returned by
-    Evaluator.score_one(). Each layer is either a TierResult or the
+    Scorer.score_one(). Each layer is either a TierResult or the
     literal string "skipped" (when correctness fails and Mid/Rich are
     gated off).
 
@@ -65,7 +65,7 @@ LayerResult = TierResult | Literal["skipped"]
 
 
 class ScoreOneResult(BaseModel):
-    """Full scorecard from Evaluator.score_one(). Five layers, in fixed
+    """Full scorecard from Scorer.score_one(). Five layers, in fixed
     order. The 'floor' layer is a back-compat alias for the union of
     'shape' and 'correctness' (kept for callers that still consume the
     old 3-layer shape)."""

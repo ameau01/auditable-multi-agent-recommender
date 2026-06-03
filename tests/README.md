@@ -17,7 +17,7 @@ tests/
 │   │   ├── test_richness_measure.py            score_rich + fixture extraction
 │   │   ├── test_enums.py                       enum universes + helpers
 │   │   ├── test_rules.py                       rules loader + validator (tmp_path)
-│   │   ├── test_evaluator.py                   Evaluator class (direct constructor)
+│   │   ├── test_evaluator.py                   Scorer class (direct constructor)
 │   │   └── test_tiers.py                       facade + score_all_tiers
 │   └── agents/                                 mirrors src/agents/
 │       └── test_orchestrator.py                orchestrate() stub contract
@@ -89,7 +89,7 @@ isolated fixtures so a failure pinpoints one function's behavior.
 | `evaluator/test_richness_measure.py` | 9 | `src/evaluator/richness_measure.py` |
 | `evaluator/test_enums.py` | 11 | `src/evaluator/enums.py` |
 | `evaluator/test_rules.py` | 13 | `src/evaluator/rules.py` |
-| `evaluator/test_evaluator.py` | 10 | `src/evaluator/evaluator.py` (Evaluator class) |
+| `evaluator/test_evaluator.py` | 10 | `src/evaluator/evaluator.py` (Scorer class) |
 | `evaluator/test_tiers.py` | 2 | `src/evaluator/tiers.py` (facade) |
 | `agents/test_orchestrator.py` | 2 | `src/agents/orchestrator.py` |
 

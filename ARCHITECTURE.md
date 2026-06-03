@@ -28,46 +28,44 @@ The deeper rationale for each principle is in [docs/decisions.md](docs/decisions
 
 ```mermaid
 flowchart TB
-    subgraph Trigger["Review trigger"]
-        TR[Review trigger<br/>app-name + optional alert description]
-    end
+    %% Centered main flow — the stages a cycle moves through
+    TR([Review trigger<br/><i>app-name + optional alert</i>])
+    SUP[Supervisor<br/><i>router · decides next step · decides when to complete</i>]
+    SPECS[Specialists<br/><i>Compute · Data Layer · Network</i><br/><i>ReAct, tier-bounded</i>]
+    EV[Cross-Tier Evaluator<br/><i>drift-check + synthesis</i>]
+    GATE{{Action Harness gate<br/><i>severity · duplication · evidence completeness</i>}}
+    RP[Review Packet<br/><i>recommendation + evidence chain</i>]
+    H([Human reviewer<br/><i>approve / reject / defer</i>])
 
-    subgraph Scenario["Scenario data — validated by the Input Harness, pulled via MCP"]
-        TF[Terraform definition]
-        TEL[Telemetry: 14 days, 15-min intervals]
-        SC[Sidecar metadata]
-    end
+    %% Side branches — perpendicular to the main flow
+    SM[System Mapper<br/><i>Terraform → tier graph</i>]
+    TEL[(MCP scenario data<br/><i>Terraform + 14d telemetry + sidecar</i><br/><i>validated by Input Harness</i>)]
 
-    subgraph Pipeline["Agent pipeline"]
-        SUP[Supervisor<br/>workflow orchestration]
-        SM[System Mapper<br/>Terraform -> tier graph]
-        CA[Compute Analyst<br/>ReAct, tier-bounded]
-        DA[Data Layer Analyst<br/>ReAct, tier-bounded]
-        NA[Network Analyst<br/>ReAct, tier-bounded]
-        EV[Cross-Tier Evaluator<br/>drift-check + synthesis]
-    end
-
-    subgraph Output
-        RP[Review Packet<br/>recommendation + evidence chain]
-        H[Human reviewer<br/>approve / reject / defer]
-    end
-
+    %% Main vertical sequence
     TR --> SUP
-    SUP --> SM
-    SM -.->|pull initial package via MCP| Scenario
-    SM --> SUP
-    SUP --> CA
-    SUP --> DA
-    SUP --> NA
-    CA -.->|pull tier telemetry via MCP| Scenario
-    DA -.->|pull tier telemetry via MCP| Scenario
-    NA -.->|pull tier telemetry via MCP| Scenario
-    CA --> EV
-    DA --> EV
-    NA --> EV
-    EV --> RP
+    SUP --> SPECS
+    SPECS --> EV
+    EV --> GATE
+    GATE --> RP
     RP --> H
+
+    %% Perpendicular branches (one edge each, no clutter)
+    SM -. tier topology .-> SUP
+    SPECS <-. tool calls .-> TEL
+
+    classDef center fill:#eef1ff,stroke:#4a5fff,stroke-width:1.5px,color:#111
+    classDef side fill:#fafafa,stroke:#999,stroke-dasharray:4 3,color:#444
+    classDef terminus fill:#fff,stroke:#222,stroke-width:1.5px,color:#000
+    classDef gate fill:#fffbe6,stroke:#c08400,stroke-width:1.5px,color:#111
+    class SUP,SPECS,EV,RP center
+    class SM,TEL side
+    class GATE gate
+    class TR,H terminus
 ```
+
+**Reading the diagram.** The vertical sequence — trigger, Supervisor, Specialists, Evaluator, gate, Review Packet, Human — is the conceptual flow of one review cycle. System Mapper sits perpendicular because it's a one-shot topology lookup that feeds the Supervisor, not a stage in the recommendation pipeline. MCP scenario data sits perpendicular on the other side because it's the data source the Specialists (and Mapper) query via tool calls.
+
+**Supervisor is the only router.** Although the diagram draws the sequence as a vertical chain, the implementation routes every transition through the Supervisor: Supervisor decides whether to call System Mapper, which specialists to dispatch, when to synthesize via the Evaluator, when to send the recommendation to the gate, and crucially — when to terminate the cycle. Every worker node returns to the Supervisor between stages; no worker can decide "we're done" on its own. The downward arrows are the conceptual sequence; the routing loop through the Supervisor is left implicit to keep the diagram readable.
 
 Every arrow crosses one or more harnesses — the next section describes them. Note that this is a logical topology, not a microservice deployment diagram. For this portfolio implementation, the system runs as a single Python process; the architectural boundaries are strictly logical, not infrastructural.
 

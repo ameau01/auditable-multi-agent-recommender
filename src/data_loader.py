@@ -48,15 +48,14 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
 from huggingface_hub import snapshot_download
 
+from .common.config import DATASET_REPO  # noqa: F401  re-export
+from .common.init import ensure_env_loaded
+
 # Pick up HF_HOME (and any other config) from .env if the user has copied
-# .env.example -> .env. Idempotent; safe to call at import time.
-load_dotenv()
-
-
-DATASET_REPO = "ameau01/synthesized-cloud-optimization-recommendations"
+# .env.example -> .env. Centralized in src.common.init; idempotent.
+ensure_env_loaded()
 
 # Set to a commit hash (e.g. "ae3b650f57eabf679cff98234c6d1ae3bbf1d242") to
 # pin the dataset version. Leave as None to always fetch main. Once your
@@ -104,11 +103,40 @@ HF_CACHE_DIR: Path = _resolve_cache_dir()
 def get_dataset_path() -> Path:
     """Return the local path to the dataset snapshot.
 
-    On first call, fetches the dataset from Hugging Face Hub and caches it
-    at HF_CACHE_DIR (defaults to <repo-root>/.hf_cache/). On subsequent
-    calls, returns the cached path immediately. The cache survives across
-    sessions.
+    First call after a clean checkout: fetches the dataset from Hugging
+    Face Hub and caches it at HF_CACHE_DIR (defaults to
+    <repo-root>/.hf_cache/). All subsequent calls — including new
+    processes, new sessions, days later — short-circuit to the cached
+    snapshot with zero network traffic.
+
+    Cache hit detection: try `local_files_only=True` first. If the cache
+    is populated, snapshot_download returns the path without contacting
+    HF Hub at all. If the cache is empty (LocalEntryNotFoundError), fall
+    through to the online path that does the actual download.
+
+    Why this matters: the previous unconditional call made a metadata
+    HEAD request to HF on every cycle, which is wasted bandwidth on
+    every run, hangs for ~30s on an offline laptop, and prints a
+    misleading "Fetching 151 files" progress bar that looks like a
+    re-download. Online-only when the cache says we need it; silent
+    otherwise.
     """
+    # Path 1: cache hit — return immediately, no network call.
+    try:
+        path = snapshot_download(
+            repo_id=DATASET_REPO,
+            repo_type="dataset",
+            revision=DATASET_REVISION,
+            cache_dir=str(HF_CACHE_DIR),
+            local_files_only=True,
+        )
+        return Path(path)
+    except Exception:
+        # local_files_only raises when the cache is missing or partial.
+        # Fall through to the full online path; if THAT fails (e.g.
+        # offline first-run), the caller sees the real network error.
+        pass
+    # Path 2: cache miss — full download, populates HF_CACHE_DIR.
     path = snapshot_download(
         repo_id=DATASET_REPO,
         repo_type="dataset",

@@ -88,4 +88,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentations
 - `docs/audit-trail.md`, `docs/harnesses.md`
 
-- 
+## [FIX evidence and reason harness] BUG + BEGIN langgraph coding.
+
+### Changed
+- add proper evidence for every decision
+
+### Added
+- added proper langgraph start /end node
+- added sysem mapper node and supervisor node 
+
+### Documentation
+- `docs/audit-trail.md`, `docs/harnesses.md`, `ARCHITECTURE.md`

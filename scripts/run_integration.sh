@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Run all integration tests:
-#   - tests/integration/test_eval_set_data.py   (gold answer well-formedness)
-#   - tests/integration/test_golden_answers.py  (gold passes evaluator)
-#   - tests/integration/test_edge_cases.py      (bad mocks fail expected layer)
+# Run all integration tests under tests/integration/.
 #
 # Usage:
 #   scripts/run_integration.sh [pytest args]
+#
+# Flags:
+#   -h, --help          Show this help message and exit.
+
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+  sed -n '2,8p' "$0" | sed 's/^# \{0,1\}//'
+  exit 0
+fi
 
 set -e
 cd "$(dirname "$0")/.."

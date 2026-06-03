@@ -81,7 +81,7 @@ class InputHarness:
     # ----------------------------------------------------------------
     def validate_trigger(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
         application_id: str,
     ) -> ValidationResult:
         """Confirm the trigger's application_id is well-formed.
@@ -93,15 +93,15 @@ class InputHarness:
         """
         check_name = "trigger_legitimacy"
         if _APP_ID_PATTERN.match(application_id):
-            return self._emit(
-                review_cycle_id=review_cycle_id,
+            return self.route(
+                cycle_id=cycle_id,
                 check_name=check_name,
                 application_id=application_id,
                 verdict="passed",
                 failure_reason=None,
             )
-        return self._emit(
-            review_cycle_id=review_cycle_id,
+        return self.route(
+            cycle_id=cycle_id,
             check_name=check_name,
             application_id=application_id,
             verdict="rejected",
@@ -113,7 +113,7 @@ class InputHarness:
 
     def validate_application_known(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
         application_id: str,
     ) -> ValidationResult:
         """Confirm the application_id is one this system knows about.
@@ -126,15 +126,15 @@ class InputHarness:
         """
         check_name = "application_known"
         if application_id in _KNOWN_APP_IDS:
-            return self._emit(
-                review_cycle_id=review_cycle_id,
+            return self.route(
+                cycle_id=cycle_id,
                 check_name=check_name,
                 application_id=application_id,
                 verdict="passed",
                 failure_reason=None,
             )
-        return self._emit(
-            review_cycle_id=review_cycle_id,
+        return self.route(
+            cycle_id=cycle_id,
             check_name=check_name,
             application_id=application_id,
             verdict="rejected",
@@ -149,7 +149,7 @@ class InputHarness:
     # ----------------------------------------------------------------
     def validate_bundle(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
         bundle: dict[str, Any],
     ) -> ValidationResult:
         """Full schema/completeness/continuity check over the loaded bundle.
@@ -165,18 +165,24 @@ class InputHarness:
         )
 
     # ----------------------------------------------------------------
-    # Internal: emit and return
+    # Public: route the validation verdict and return the result
     # ----------------------------------------------------------------
-    def _emit(
+    # Public on purpose, matching ReasoningHarness.route and
+    # ActionHarness.route_policy_check. Callers route a verdict through
+    # this method so it lands as a harness_trail row with the
+    # appropriate enforcement type. "Route" matches LangGraph vocabulary
+    # — moving a verdict from one node to the next — rather than "emit,"
+    # which in LangGraph specifically denotes streaming Pregel events.
+    def route(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
         check_name: str,
         application_id: str,
         verdict: Verdict,
         failure_reason: str | None,
     ) -> ValidationResult:
         record = HarnessRecord(
-            review_cycle_id=review_cycle_id,
+            cycle_id=cycle_id,
             parent_id=None,
             related_event_id=None,
             harness="input",

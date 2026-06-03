@@ -43,42 +43,42 @@ def populated_cycle(store: AuditStore) -> tuple[str, dict[str, int]]:
     from sqlalchemy import text
     with store.engine.connect() as conn:
         row = conn.execute(
-            text("SELECT id FROM audit_records WHERE review_cycle_id = :c AND type = 'cycle_started'"),
+            text("SELECT id FROM audit_records WHERE cycle_id = :c AND type = 'cycle_started'"),
             {"c": cid},
         ).fetchone()
         ids["cycle_started"] = int(row[0])
 
     # review_request — child of cycle_started
     ids["review_request"] = store.add_event(AuditRecord(
-        review_cycle_id=cid, parent_id=ids["cycle_started"],
+        cycle_id=cid, parent_id=ids["cycle_started"],
         category="decision", type="review_request", agent="input_harness",
         content={"application_id": "app-08", "trigger_source": "test"},
     ))
 
     # thought — child of review_request
     ids["thought"] = store.add_event(AuditRecord(
-        review_cycle_id=cid, parent_id=ids["review_request"],
+        cycle_id=cid, parent_id=ids["review_request"],
         category="decision", type="thought", agent="compute_analyst",
         content={"thought": "Should I look at CPU?"},
     ))
 
     # tool_call (evidence) — child of thought
     ids["tool_call"] = store.add_event(AuditRecord(
-        review_cycle_id=cid, parent_id=ids["thought"],
+        cycle_id=cid, parent_id=ids["thought"],
         category="evidence", type="tool_call", agent="compute_analyst",
         content={"tool_name": "get_summary_statistics", "arguments": {"app_name": "app-08"}},
     ))
 
     # observation (evidence) — child of tool_call
     ids["observation"] = store.add_event(AuditRecord(
-        review_cycle_id=cid, parent_id=ids["tool_call"],
+        cycle_id=cid, parent_id=ids["tool_call"],
         category="evidence", type="observation", agent="compute_analyst",
         content={"tool_name": "get_summary_statistics", "result": {"p95": 27.1}},
     ))
 
     # specialist_finding — child of thought; cites observation
     ids["specialist_finding"] = store.add_event(AuditRecord(
-        review_cycle_id=cid, parent_id=ids["thought"],
+        cycle_id=cid, parent_id=ids["thought"],
         category="decision", type="specialist_finding", agent="compute_analyst",
         content={"specialist": "compute_analyst", "finding_type": "no_issue_found",
                  "evidence_refs": [ids["observation"]]},
@@ -86,14 +86,14 @@ def populated_cycle(store: AuditStore) -> tuple[str, dict[str, int]]:
 
     # evaluator_record — child of specialist_finding
     ids["evaluator_record"] = store.add_event(AuditRecord(
-        review_cycle_id=cid, parent_id=ids["specialist_finding"],
+        cycle_id=cid, parent_id=ids["specialist_finding"],
         category="decision", type="evaluator_record", agent="cross_tier_evaluator",
         content={"synthesis": {"verdict": "no action"}, "evidence_refs": [ids["observation"]]},
     ))
 
     # recommendation — child of evaluator_record; cites observation
     ids["recommendation"] = store.add_event(AuditRecord(
-        review_cycle_id=cid, parent_id=ids["evaluator_record"],
+        cycle_id=cid, parent_id=ids["evaluator_record"],
         category="decision", type="recommendation", agent="supervisor",
         content={"composite": {"scenario_id": "app-08", "specific_change": "No action"},
                  "evidence_refs": [ids["observation"]]},

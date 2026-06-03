@@ -6,7 +6,7 @@ action_category all match the per-scenario allowed list (which under the
 current design is a single-value list matching the gold).
 
 This is the gate. When Correctness fails, Mid and Rich are skipped (the
-caller / Evaluator class enforces that). A wrong-tier or wrong-finding-type
+caller / Scorer class enforces that). A wrong-tier or wrong-finding-type
 recommendation should fail here regardless of how well-structured the rest is.
 
 Also exposes score_floor as a back-compat alias that merges Shape +

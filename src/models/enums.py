@@ -81,7 +81,7 @@ ActionCategory = Literal[
 # ============================================================
 # AgentName — every entity that can emit an audit record
 # ============================================================
-# Twelve values covering: the orchestration spine (supervisor, system
+# Twelve values covering: the orchestration (supervisor, system
 # mapper, three tier specialists, cross-tier evaluator), the eval-set
 # scorer (evaluator_harness), four harness emitters (input/action/
 # reasoning/audit), and the human reviewer.
@@ -128,6 +128,7 @@ RecordType = Literal[
     "cycle_started",              # begin tag (parent_id NULL)
     "cycle_completed",            # end tag (parent_id = cycle_started.id)
     "review_request",             # ingest trigger
+    "system_mapper_output",       # System Mapper's analysis plan + tier graph
     "supervisor_decision",        # specialist deployment, retry, escalate
     "thought",                    # one ReAct loop thought step
     "specialist_finding",         # a tier specialist's verdict
@@ -184,9 +185,68 @@ HarnessRecordType = Literal[
 
 
 # ============================================================
-# OpType — internal_ops.op_type values (the post-hoc operations)
+# FailureStage — machine-readable label for where a cycle terminated
 # ============================================================
-# Distinct from RecordType because internal_ops is a separate table
+# Stamped on `cycle_completed.content.failed_at_stage` whenever the
+# cycle's `final_status` is not "completed". Lets the renderer branch
+# on stage without parsing the prose `failure_reason` string.
+#
+# Stages map 1:1 to the orchestration nodes:
+#   input_harness — Input Harness rejected the trigger/scenario.
+#   system_mapper — System Mapper failed (parse error, MCP failure).
+#   supervisor    — Supervisor itself errored or rejected its own decision.
+#   specialist    — A tier specialist (compute/data/network) raised.
+#   evaluator     — Cross-Tier Evaluator failed to synthesize.
+#   gate          — Action Harness recommendation gate rejected.
+#
+# On a successful cycle (final_status="completed"), failed_at_stage is
+# absent — there's no failure to attribute.
+FailureStage = Literal[
+    "input_harness",
+    "system_mapper",
+    "supervisor",
+    "specialist",
+    "evaluator",
+    "gate",
+]
+
+
+# ============================================================
+# SupervisorDecisionType — the supervisor's routing decision space
+# ============================================================
+# Stamped on `supervisor_decision.content.decision_type`. The Supervisor
+# is the only router in the LangGraph; every transition between worker
+# nodes is its decision. This Literal enumerates the choices it can make.
+#
+#   dispatch_system_mapper — ask System Mapper to produce tier_topology.
+#                            Typically the first decision in any cycle.
+#   dispatch_specialists   — fan out to one or more tier specialists.
+#                            Decision payload's `targets` lists which.
+#   synthesize             — hand the collected findings to the
+#                            Cross-Tier Evaluator. (Reserved for 11d.)
+#   gate                   — send the recommendation to the Action
+#                            Harness gate. (Reserved for 11e.)
+#   complete               — terminate the cycle. The `terminal_state`
+#                            field on the payload (`completed`,
+#                            `no_specialists`, `insufficient_data`, etc.)
+#                            says why.
+#
+# Every decision must carry `evidence_refs` — the audit_records ids the
+# decision relied on — so the Reasoning Harness can verify each routing
+# decision is evidence-backed.
+SupervisorDecisionType = Literal[
+    "dispatch_system_mapper",
+    "dispatch_specialists",
+    "synthesize",
+    "gate",
+    "complete",
+]
+
+
+# ============================================================
+# OpType — operations.op_type values (the post-hoc operations)
+# ============================================================
+# Distinct from RecordType because operations is a separate table
 # tracking operations performed AFTER a cycle ends (eval, render).
 OpType = Literal[
     "evaluation",
@@ -196,7 +256,7 @@ OpType = Literal[
 
 
 # ============================================================
-# OpSubType — the per-event types within an internal_ops record chain
+# OpSubType — the per-event types within an operations record chain
 # ============================================================
 OpSubType = Literal[
     # evaluation chain
@@ -211,7 +271,7 @@ OpSubType = Literal[
 # ============================================================
 # Runtime universes derived from the Literals
 # ============================================================
-# Evaluator code (rules.py validator) consumes frozenset universes.
+# The Scorer's rules.py validator consumes frozenset universes.
 # Deriving them here from the Literals via typing.get_args means the
 # universe always matches the Literal — no manual sync needed.
 TIERS: frozenset[str] = frozenset(get_args(Tier))
@@ -225,3 +285,5 @@ OP_TYPES: frozenset[str] = frozenset(get_args(OpType))
 HARNESS_NAMES: frozenset[str] = frozenset(get_args(HarnessName))
 VERDICTS: frozenset[str] = frozenset(get_args(Verdict))
 HARNESS_RECORD_TYPES: frozenset[str] = frozenset(get_args(HarnessRecordType))
+FAILURE_STAGES: frozenset[str] = frozenset(get_args(FailureStage))
+SUPERVISOR_DECISION_TYPES: frozenset[str] = frozenset(get_args(SupervisorDecisionType))

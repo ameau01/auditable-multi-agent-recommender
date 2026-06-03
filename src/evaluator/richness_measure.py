@@ -9,7 +9,7 @@ Rich is the higher richness threshold. A prediction passes Rich when:
        - projected_state_quantified
        - evidence_structured
 
-The judge call is made once per scenario in Evaluator.score_one() and the
+The judge call is made once per scenario in Scorer.score_one() and the
 result is shared between Mid and Rich. This module accepts the judge
 result as an argument; it does not call the LLM itself.
 

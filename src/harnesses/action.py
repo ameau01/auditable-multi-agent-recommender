@@ -72,7 +72,7 @@ class ActionHarness:
     # ----------------------------------------------------------------
     def check_tool_call(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
         agent: AgentName,
         tool_name: str,
         arguments: dict[str, Any] | None = None,
@@ -93,8 +93,8 @@ class ActionHarness:
         agent_table = SPECIALIST_TOOL_ALLOWLIST.get(agent)
 
         if agent_table is None:
-            return self._emit_policy_check(
-                review_cycle_id=review_cycle_id,
+            return self.route_policy_check(
+                cycle_id=cycle_id,
                 agent=agent,
                 tool_name=tool_name,
                 arguments_snapshot=args,
@@ -107,8 +107,8 @@ class ActionHarness:
             )
 
         if tool_name not in agent_table:
-            return self._emit_policy_check(
-                review_cycle_id=review_cycle_id,
+            return self.route_policy_check(
+                cycle_id=cycle_id,
                 agent=agent,
                 tool_name=tool_name,
                 arguments_snapshot=args,
@@ -126,8 +126,8 @@ class ActionHarness:
             # Tool takes a tier argument; check the value against the
             # allow-list for this (agent, tool) pair.
             if requested_tier is None:
-                return self._emit_policy_check(
-                    review_cycle_id=review_cycle_id,
+                return self.route_policy_check(
+                    cycle_id=cycle_id,
                     agent=agent,
                     tool_name=tool_name,
                     arguments_snapshot=args,
@@ -139,8 +139,8 @@ class ActionHarness:
                     ),
                 )
             if requested_tier not in allowed_tiers:
-                return self._emit_policy_check(
-                    review_cycle_id=review_cycle_id,
+                return self.route_policy_check(
+                    cycle_id=cycle_id,
                     agent=agent,
                     tool_name=tool_name,
                     arguments_snapshot=args,
@@ -154,8 +154,8 @@ class ActionHarness:
                 )
 
         # All checks passed.
-        return self._emit_policy_check(
-            review_cycle_id=review_cycle_id,
+        return self.route_policy_check(
+            cycle_id=cycle_id,
             agent=agent,
             tool_name=tool_name,
             arguments_snapshot=args,
@@ -169,7 +169,7 @@ class ActionHarness:
     # ----------------------------------------------------------------
     def check_recommendation_gate(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
         recommendation_record_id: int,
         recommendation_content: dict[str, Any],
     ) -> GateResult:
@@ -187,11 +187,17 @@ class ActionHarness:
         )
 
     # ----------------------------------------------------------------
-    # Internal: emit and return
+    # Public: route the policy-check verdict and return the result
     # ----------------------------------------------------------------
-    def _emit_policy_check(
+    # Public on purpose, matching ReasoningHarness.route and
+    # InputHarness.route. Callers route a verdict through this method
+    # so it lands as a harness_trail row with the appropriate enforcement
+    # type. "Route" matches LangGraph vocabulary — moving a verdict from
+    # one node to the next — rather than "emit," which in LangGraph
+    # specifically denotes streaming Pregel events.
+    def route_policy_check(
         self,
-        review_cycle_id: str,
+        cycle_id: str,
         agent: AgentName,
         tool_name: str,
         arguments_snapshot: dict[str, Any],
@@ -200,7 +206,7 @@ class ActionHarness:
         rejection_reason: str | None,
     ) -> PolicyResult:
         record = HarnessRecord(
-            review_cycle_id=review_cycle_id,
+            cycle_id=cycle_id,
             parent_id=None,
             related_event_id=None,   # stamped by the caller post-tool-call
             harness="action",

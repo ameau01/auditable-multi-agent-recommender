@@ -41,7 +41,7 @@ the original flat-file shape and is one revision behind on naming.
 | `src/models/composite.py`                         | Pydantic schema; defines the composite shape and validators.  |
 | `src/evaluator/`                                  | Pure scoring code. Reads composites from here.                |
 | `src/evaluator/eval.py`                    | CLI entry point (`--app-name`, `--prediction`, `--no-judge`).       |
-| `src/evaluator/evaluator.py`               | `Evaluator` class for Python API use.                               |
+| `src/evaluator/evaluator.py`               | `Scorer` class for Python API use.                                  |
 | `src/evaluator/judge_client.py`            | Anthropic SDK wrapper for the LLM judge (Mid + Rich).               |
 | `src/evaluator/prompts/judge_richness.md`  | Global scoring prompt used by the judge.                            |
 | `tests/integration/test_golden_answers.py` | Pytest: every gold passes every deterministic layer.                |
@@ -62,7 +62,7 @@ the agent pulls telemetry for that application; the evaluator scores
 the resulting recommendation for that application. The mapping `app-NN
 → scenario id NN` is the only indirection.
 
-The Python library API (`Evaluator` class) operates at the
+The Python library API (`Scorer` class) operates at the
 dataset-internal level and uses `scenario_id`; the translation happens
 at the CLI surface.
 
@@ -144,21 +144,21 @@ Exit codes:
 ```python
 import json
 from pathlib import Path
-from src.evaluator import Evaluator
+from src.evaluator import Scorer
 from src.evaluator.judge_client import JudgeClient
 
 # Build the judge if an API key is available, otherwise None (graceful skip).
 judge = JudgeClient() if JudgeClient.is_available() else None
 
 # Build once, score many
-e = Evaluator.from_eval_set_dir(
+s = Scorer.from_eval_set_dir(
     "eval-set/",
     dataset_examples_dir="dataset-examples/",
     judge=judge,
 )
 
 prediction = json.loads(Path("my_prediction.json").read_text())
-result = e.score_one("08", prediction)
+result = s.score_one("08", prediction)
 
 print(result["shape"].passed)        # bool
 print(result["correctness"].passed)  # bool
@@ -167,8 +167,10 @@ print(result["correctness"].passed)  # bool
 # Mid + Rich are TierResult with a 'skipped' check inside.
 ```
 
-The Evaluator caches rules + gold answers at init; subsequent
-`score_one` calls reuse them.
+The Scorer caches rules + gold answers at init; subsequent
+`score_one` calls reuse them. The name `Scorer` (not `Evaluator`) keeps
+this class distinct from the Cross-Tier Evaluator agent that *produces*
+the recommendation being scored.
 
 ### 4. Run the demo (see the evaluator on one scenario)
 

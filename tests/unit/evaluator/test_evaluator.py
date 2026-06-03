@@ -1,6 +1,6 @@
-"""Unit tests for src/evaluator/evaluator.py (the Evaluator class).
+"""Unit tests for src/evaluator/evaluator.py (the Scorer class).
 
-Construct the Evaluator with crafted in-memory dicts (via the bare
+Construct the Scorer with crafted in-memory dicts (via the bare
 constructor) or with tmp_path fixtures (for from_single_rules_file).
 No reads from the real eval-set/ folder; that path is exercised by
 tests/integration/.
@@ -12,7 +12,7 @@ import json
 
 import pytest
 
-from src.evaluator import Evaluator
+from src.evaluator import Scorer
 
 
 # ============================================================
@@ -52,12 +52,12 @@ def _valid_prediction() -> dict:
 # ============================================================
 class TestEvaluatorConstruction:
     def test_bare_constructor_accepts_rules_dict(self):
-        e = Evaluator(rules_by_sid={"08": _valid_rules()})
+        e = Scorer(rules_by_sid={"08": _valid_rules()})
         assert e.scenario_ids == ["08"]
 
     def test_bare_constructor_accepts_metadata_dict(self):
         meta = {"08": {"scenario_specific_evidence": {}}}
-        e = Evaluator(
+        e = Scorer(
             rules_by_sid={"08": _valid_rules()},
             metadata_by_sid=meta,
         )
@@ -66,7 +66,7 @@ class TestEvaluatorConstruction:
     def test_from_single_rules_file_loads_one_scenario(self, tmp_path):
         rules_path = tmp_path / "rules.json"
         rules_path.write_text(json.dumps(_valid_rules()))
-        e = Evaluator.from_single_rules_file(rules_path, sid="99")
+        e = Scorer.from_single_rules_file(rules_path, sid="99")
         assert e.scenario_ids == ["99"]
         assert e.rules_for("99")["primary_tier_allowed"] == ["compute"]
 
@@ -76,22 +76,22 @@ class TestEvaluatorConstruction:
 # ============================================================
 class TestEvaluatorLookup:
     def test_rules_for_known_sid(self):
-        e = Evaluator(rules_by_sid={"08": _valid_rules()})
+        e = Scorer(rules_by_sid={"08": _valid_rules()})
         rules = e.rules_for("08")
         assert "finding_type_allowed" in rules
 
     def test_rules_for_unknown_sid_raises_keyerror(self):
-        e = Evaluator(rules_by_sid={"08": _valid_rules()})
+        e = Scorer(rules_by_sid={"08": _valid_rules()})
         with pytest.raises(KeyError) as exc_info:
             e.rules_for("99")
         assert "99" in str(exc_info.value)
 
     def test_metadata_for_returns_none_when_not_loaded(self):
-        e = Evaluator(rules_by_sid={"08": _valid_rules()})
+        e = Scorer(rules_by_sid={"08": _valid_rules()})
         assert e.metadata_for("08") is None
 
     def test_scenario_ids_returns_sorted_list(self):
-        e = Evaluator(rules_by_sid={
+        e = Scorer(rules_by_sid={
             "08": _valid_rules(),
             "01": _valid_rules(),
             "15": _valid_rules(),
@@ -104,12 +104,12 @@ class TestEvaluatorLookup:
 # ============================================================
 class TestEvaluatorScoreOne:
     def test_score_one_returns_dict_with_all_layers(self):
-        e = Evaluator(rules_by_sid={"08": _valid_rules()})
+        e = Scorer(rules_by_sid={"08": _valid_rules()})
         result = e.score_one("08", _valid_prediction())
         assert set(result.keys()) >= {"shape", "correctness", "floor", "mid", "rich"}
 
     def test_score_one_gold_passes_every_layer(self):
-        e = Evaluator(rules_by_sid={"08": _valid_rules()})
+        e = Scorer(rules_by_sid={"08": _valid_rules()})
         result = e.score_one("08", _valid_prediction())
         assert result["shape"].passed
         assert result["correctness"].passed
@@ -117,7 +117,7 @@ class TestEvaluatorScoreOne:
         assert result["rich"].passed
 
     def test_score_one_skips_mid_and_rich_when_correctness_fails(self):
-        e = Evaluator(rules_by_sid={"08": _valid_rules()})
+        e = Scorer(rules_by_sid={"08": _valid_rules()})
         bad = _valid_prediction()
         bad["primary_tier"] = "database"  # wrong: rules say compute
         result = e.score_one("08", bad)
@@ -132,7 +132,7 @@ class TestEvaluatorScoreOne:
 # ============================================================
 class TestEvaluatorScoreAll:
     def test_score_all_returns_one_entry_per_scenario(self):
-        e = Evaluator(rules_by_sid={
+        e = Scorer(rules_by_sid={
             "08": _valid_rules(),
             "01": _valid_rules(),
         })
@@ -144,7 +144,7 @@ class TestEvaluatorScoreAll:
         assert set(results.keys()) == {"01", "08"}
 
     def test_score_all_reports_missing_prediction(self):
-        e = Evaluator(rules_by_sid={
+        e = Scorer(rules_by_sid={
             "08": _valid_rules(),
             "01": _valid_rules(),
         })

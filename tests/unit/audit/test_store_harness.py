@@ -23,7 +23,7 @@ from src.models.audit import HarnessRecord
 def _h(cycle_id: str, **overrides) -> HarnessRecord:
     """Build a default HarnessRecord with optional field overrides."""
     base = dict(
-        review_cycle_id=cycle_id,
+        cycle_id=cycle_id,
         parent_id=None,
         related_event_id=None,
         harness="action",
@@ -53,8 +53,8 @@ def test_round_trip_with_minimum_fields(store: AuditStore) -> None:
     with store.engine.connect() as conn:
         row = conn.execute(
             text(
-                "SELECT review_cycle_id, harness, type, verdict "
-                "FROM harness_trail WHERE review_cycle_id = :c"
+                "SELECT cycle_id, harness, type, verdict "
+                "FROM harness_trail WHERE cycle_id = :c"
             ),
             {"c": cid},
         ).fetchone()
@@ -98,7 +98,7 @@ def test_bogus_verdict_rejected_by_check_constraint(store: AuditStore) -> None:
         conn.execute(
             text(
                 "INSERT INTO harness_trail "
-                "(review_cycle_id, harness, type, verdict, content) "
+                "(cycle_id, harness, type, verdict, content) "
                 "VALUES (:c, 'action', 'tool_call_policy_check', 'maybe', '{}')"
             ),
             {"c": cid},
@@ -111,7 +111,7 @@ def test_bogus_harness_rejected_by_check_constraint(store: AuditStore) -> None:
         conn.execute(
             text(
                 "INSERT INTO harness_trail "
-                "(review_cycle_id, harness, type, verdict, content) "
+                "(cycle_id, harness, type, verdict, content) "
                 "VALUES (:c, 'fifth_harness', 'tool_call_policy_check', 'passed', '{}')"
             ),
             {"c": cid},

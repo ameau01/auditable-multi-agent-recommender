@@ -1,14 +1,31 @@
 """Multi-agent orchestration layer.
 
-The six agents (Supervisor, System Mapper, three Tier Specialists,
-Cross-Tier Evaluator) and the orchestrator that runs them. The agent
-implementation is in progress; see CHANGELOG.md for current status.
+The six-agent pipeline (Supervisor, System Mapper, three Tier Specialists,
+Cross-Tier Evaluator) plus the LangGraph orchestrator that wires them.
+Build progresses phase-by-phase; see CHANGELOG.md for status.
 
-The stable interface is the orchestrator's return value: a
-recommendation dict that conforms to the eval-set gold-answer schema.
-src/evaluator/ scores that output without knowing how it was produced.
+Phase 11a (current): the agent skeleton. Supervisor + System Mapper + LangGraph
+state schema run end-to-end. Specialists and Cross-Tier Evaluator land
+in 11b–11d.
+
+Primary entry point:
+
+    from src.agents.runner import run_cycle
+    cycle_id = run_cycle("app-08")
+
+Other public exports below let notebooks and tests build pieces directly
+without going through the runner.
 """
 
-from src.agents.orchestrator import orchestrate
+from src.agents.analysis_plan import AnalysisPlan
+from src.agents.orchestrator import build_graph, orchestrate
+from src.agents.runner import run_cycle
+from src.agents.state import CycleState
 
-__all__ = ["orchestrate"]
+__all__ = [
+    "AnalysisPlan",
+    "CycleState",
+    "build_graph",
+    "orchestrate",
+    "run_cycle",
+]

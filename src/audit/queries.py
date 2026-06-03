@@ -35,7 +35,7 @@ from typing import Any
 from sqlalchemy import select, text
 
 from ..models.audit import AuditRecord, HarnessRecord, InternalOpRecord
-from .schema import audit_records, harness_trail, internal_ops
+from .schema import audit_records, harness_trail, operations
 from .store import AuditStore
 
 
@@ -63,7 +63,7 @@ def get_cycle_events(store: AuditStore, cycle_id: str) -> list[AuditRecord]:
     with store.engine.connect() as conn:
         rows = conn.execute(
             select(audit_records)
-            .where(audit_records.c.review_cycle_id == cycle_id)
+            .where(audit_records.c.cycle_id == cycle_id)
             .order_by(audit_records.c.id)
         ).mappings().all()
     return [_row_to_audit_record(r) for r in rows]
@@ -136,7 +136,7 @@ def get_evaluations_for_cycle(
     store: AuditStore,
     cycle_id: str,
 ) -> dict[str, list[InternalOpRecord]]:
-    """Return every internal_ops record for a cycle's evaluations,
+    """Return every operations record for a cycle's evaluations,
     grouped by op_id. Each value is the ordered chain of events for
     one evaluation invocation (typically judge_call then evaluator_score).
 
@@ -145,12 +145,12 @@ def get_evaluations_for_cycle(
     """
     with store.engine.connect() as conn:
         rows = conn.execute(
-            select(internal_ops)
+            select(operations)
             .where(
-                (internal_ops.c.target_cycle_id == cycle_id)
-                & (internal_ops.c.op_type == "evaluation")
+                (operations.c.target_cycle_id == cycle_id)
+                & (operations.c.op_type == "evaluation")
             )
-            .order_by(internal_ops.c.op_id, internal_ops.c.id)
+            .order_by(operations.c.op_id, operations.c.id)
         ).mappings().all()
     out: dict[str, list[InternalOpRecord]] = {}
     for r in rows:
@@ -178,7 +178,7 @@ def find_recommendation_for_cycle(
         row = conn.execute(
             select(audit_records)
             .where(
-                (audit_records.c.review_cycle_id == cycle_id)
+                (audit_records.c.cycle_id == cycle_id)
                 & (audit_records.c.type == "recommendation")
             )
             .order_by(audit_records.c.id)
@@ -200,7 +200,7 @@ def get_harness_events_for_cycle(
     with store.engine.connect() as conn:
         rows = conn.execute(
             select(harness_trail)
-            .where(harness_trail.c.review_cycle_id == cycle_id)
+            .where(harness_trail.c.cycle_id == cycle_id)
             .order_by(harness_trail.c.id)
         ).mappings().all()
     return [_row_to_harness_record(r) for r in rows]
@@ -240,7 +240,7 @@ def get_rejected_tool_calls_for_cycle(
         rows = conn.execute(
             select(harness_trail)
             .where(
-                (harness_trail.c.review_cycle_id == cycle_id)
+                (harness_trail.c.cycle_id == cycle_id)
                 & (harness_trail.c.harness == "action")
                 & (harness_trail.c.type == "tool_call_policy_check")
                 & (harness_trail.c.verdict == "rejected")
@@ -262,7 +262,7 @@ def find_gate_verdict_for_cycle(
         row = conn.execute(
             select(harness_trail)
             .where(
-                (harness_trail.c.review_cycle_id == cycle_id)
+                (harness_trail.c.cycle_id == cycle_id)
                 & (harness_trail.c.type == "gate_verdict")
             )
             .order_by(harness_trail.c.id.desc())
@@ -276,13 +276,13 @@ def find_gate_verdict_for_cycle(
 def _row_to_audit_record(row) -> AuditRecord:
     return AuditRecord(
         id=row["id"],
-        review_cycle_id=row["review_cycle_id"],
+        cycle_id=row["cycle_id"],
         parent_id=row["parent_id"],
         category=row["category"],
         type=row["type"],
         agent=row["agent"],
         content=_content(row["content"]),
-        emitted_at=row["emitted_at"],
+        timestamp=row["timestamp"],
     )
 
 
@@ -296,19 +296,19 @@ def _row_to_op_record(row) -> InternalOpRecord:
         parent_id=row["parent_id"],
         type=row["type"],
         content=_content(row["content"]),
-        emitted_at=row["emitted_at"],
+        timestamp=row["timestamp"],
     )
 
 
 def _row_to_harness_record(row) -> HarnessRecord:
     return HarnessRecord(
         id=row["id"],
-        review_cycle_id=row["review_cycle_id"],
+        cycle_id=row["cycle_id"],
         parent_id=row["parent_id"],
         related_event_id=row["related_event_id"],
         harness=row["harness"],
         type=row["type"],
         verdict=row["verdict"],
         content=_content(row["content"]),
-        emitted_at=row["emitted_at"],
+        timestamp=row["timestamp"],
     )

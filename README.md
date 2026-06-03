@@ -204,20 +204,38 @@ The dataset lives at
 │  ├── mcp-server.md                   # MCP read contract + dataset loading
 │  └── decisions.md                    # Trade-offs, alternatives, limitations
 ├── src/
+│  ├── common/                         # One-stop init / config / cleanup
+│  │  ├── config.py                     #   Project paths, env-var names, table names
+│  │  ├── init.py                       #   ensure_env_loaded, get_audit_store, ensure_dataset_cached, llm_provider_status
+│  │  └── cleanup.py                    #   wipe_audit_db, wipe_hf_cache, wipe_all (used by scripts/clean.sh)
 │  ├── data_loader.py                  # Fetches dataset from Hugging Face
-│  ├── agents/                         # orchestrate() interface (stub today)
-│  ├── harnesses/                      # input, reasoning, action, audit (not yet implemented)
+│  ├── agents/                         # Multi-agent (LangGraph)
+│  │  ├── state.py                      #   CycleState: locked LangGraph state schema
+│  │  ├── analysis_plan.py              #   System Mapper output (typed)
+│  │  ├── mcp_adapter.py                #   In-process MCP tool caller (18 tools)
+│  │  ├── dispatch.py                   #   ActionHarness gate + tool_call/observation writer
+│  │  ├── system_mapper.py              #   System Mapper node (terraform + metadata → plan)
+│  │  ├── supervisor.py                 #   Supervisor node (fan-out decision)
+│  │  ├── orchestrator.py               #   LangGraph builder
+│  │  ├── runner.py                     #   run_cycle(app_name) — public entry
+│  │  ├── llm_client.py                 #   Anthropic chat wrapper (Phase 11b+)
+│  │  └── mock_llm.py                   #   Deterministic mock client for tests
+│  ├── harnesses/                      # The three harness modules (first cut)
+│  │  ├── input.py                      #   InputHarness: trigger + bundle validation
+│  │  ├── action.py                     #   ActionHarness: tool-call gate + recommendation gate (Phase 11)
+│  │  └── reasoning.py                  #   ReasoningHarness: pre-emit structured-output checks
 │  ├── models/                         # Pydantic schemas: single home for all data shapes
 │  │  ├── composite.py                  #   Composite, ScoringMetadata, TraceSection, etc.
 │  │  ├── telemetry.py                  #   MCP-server response models (all 18 tools typed)
-│  │  ├── scoring.py                    #   Evaluator outputs: CheckResult, TierResult, JudgeResult, ScoreOneResult
-│  │  ├── audit.py                      #   AuditRecord + InternalOpRecord + typed content sub-models
-│  │  └── enums.py                      #   Cross-cutting Literals: Tier, FindingType, AgentName, RecordType, ...
+│  │  ├── scoring.py                    #   Scorer outputs: CheckResult, TierResult, JudgeResult, ScoreOneResult
+│  │  ├── audit.py                      #   AuditRecord + HarnessRecord + InternalOpRecord + content sub-models
+│  │  └── enums.py                      #   Cross-cutting Literals: Tier, FindingType, AgentName, RecordType, HarnessName, Verdict, ...
 │  ├── audit/                           # Audit trail persistence (SQLite via SQLAlchemy Core)
-│  │  ├── schema.py                     #   Two tables: audit_records (reasoning) + internal_ops (eval/render)
-│  │  ├── store.py                      #   AuditStore: start_cycle, add_event, complete_cycle, evaluate_recommendation
-│  │  ├── queries.py                    #   Recursive CTE walks + json_each forward citations
-│  │  └── composer.py                   #   compose_from_cycle(cycle_id) -> Composite
+│  │  ├── schema.py                     #   Three tables: audit_records (reasoning) + harness_trail (enforcement) + internal_ops (eval/render)
+│  │  ├── store.py                      #   AuditStore: start_cycle, add_event, add_harness_event, complete_cycle, evaluate_recommendation
+│  │  ├── queries.py                    #   Recursive CTE walks + json_each forward citations + harness lookups
+│  │  ├── composer.py                   #   compose_from_cycle(cycle_id) -> Composite
+│  │  └── inspect.py                    #   CLI: list, show, trace (no 'latest' magic; app-NN + optional cycle_id)
 │  ├── renderer/                       # Composite -> report.md + trace.json
 │  │  ├── render_report.py             #   markdown recommendation report
 │  │  ├── render_trace.py              #   audit-trail JSON
@@ -236,7 +254,7 @@ The dataset lives at
 │  │  ├── richness_measure.py          #   score_rich
 │  │  ├── scoring_helpers.py           #   Shared prediction_text helper
 │  │  ├── tiers.py                     #   Back-compat facade re-exporting layer funcs
-│  │  ├── evaluator.py                 #   Evaluator class (stateful API)
+│  │  ├── evaluator.py                 #   Scorer class (stateful four-layer scoring API)
 │  │  └── eval.py                      #   CLI scorer (--app-name app-NN --prediction FILE)
 ├── eval-set/                          # The benchmark (pure data + one demo)
 │  ├── expectations/                   #   18 composites (NN/raw_recommendation.json)
@@ -257,6 +275,9 @@ The dataset lives at
 ├── tests/                             # Two categories: fast unit, slower integration
 │  ├── unit/                           #   src/ code unit tests (fast, default run)
 │  │  ├── evaluator/                   #     Per-module: shape, correctness, mid, richness, enums, rules, evaluator, tiers
+│  │  ├── audit/                       #     AuditStore + queries + composer + harness_trail layer
+│  │  ├── harnesses/                   #     InputHarness, ActionHarness, ReasoningHarness
+│  │  ├── mcp_server/                  #     scope.py allow-list + stats helpers
 │  │  └── agents/                      #     orchestrator contract
 │  ├── integration/                    #   evaluator against real data + mocks
 │  │  ├── fixtures/mock_predictions/   #     4 JSON mocks used by edge-case tests
@@ -269,6 +290,10 @@ The dataset lives at
 │  ├── run_golden.sh                   #   Gold-answer validation
 │  ├── run_integration.sh              #   All integration tests
 │  ├── run_demo.sh                     #   eval-set demo
+│  ├── run_agents.sh                   #   Run one cycle of the agent system on app-NN
+│  ├── show_audit_trail.sh             #   Dump audit_records + harness_trail (no args = latest; --list shows catalog)
+│  ├── show_orchestration_trace.sh     #   Structured trace: --type decisions|evidence|both
+│  ├── clean.sh                        #   Nuke local state: --audit, --hf, or --all
 │  └── verify_trace.py                 #   Walks audit trail, confirms refs resolve
 └── notebooks/
    ├── 01_eval_walkthrough.ipynb       # Real end-to-end eval against scenario 08

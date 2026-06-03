@@ -4,7 +4,7 @@ Mid is the lower richness threshold. A prediction passes Mid when the
 LLM judge scores its `specific_change` prose at or above MID_THRESHOLD
 (currently 30) when compared against the gold's `specific_change`.
 
-The judge call itself is made once per scenario in Evaluator.score_one()
+The judge call itself is made once per scenario in Scorer.score_one()
 and the result is shared between Mid and Rich. This module is a pure
 score-interpreter; it does not call the LLM.
 

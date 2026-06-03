@@ -8,7 +8,7 @@ This doc covers what the audit trail captures, how it supports replay, why the s
 
 Every significant event in a review cycle is a record. The trail is rich enough that a reviewer reading it should be able to reconstruct exactly what the system did and why.
 
-These records split across three tables. The reasoning events (Supervisor decisions, ReAct steps, specialist findings, evaluator records, recommendation, HITL decisions) land in `audit_records` — the agent's story for the human reviewer. The enforcement events (Input Harness validations, Action Harness policy checks and gate verdicts, Reasoning Harness checks) land in `harness_trail`. Post-hoc scoring runs against a completed cycle's recommendation land in `internal_ops`. See "Storage shape" below for the per-table schemas.
+These records split across three tables. The reasoning events (Supervisor decisions, ReAct steps, specialist findings, evaluator records, recommendation, HITL decisions) land in `audit_records` — the agent's story for the human reviewer. The enforcement events (Input Harness validations, Action Harness policy checks and gate verdicts, Reasoning Harness checks) land in `harness_trail`. Post-hoc scoring runs against a completed cycle's recommendation land in `operations`. See "Storage shape" below for the per-table schemas.
 
 **Trigger and ingest records** When a review was requested, by what trigger, against which application, with what scenario hash.
 
@@ -99,7 +99,7 @@ Three append-only SQLite tables in a single file. Each has a distinct audience:
 
 - `audit_records` — the agent's reasoning story, for the human reviewer
 - `harness_trail` — what the harnesses verified or rejected, for harness reporting
-- `internal_ops` — post-hoc operations on completed cycles, for developers debugging
+- `operations` — post-hoc operations on completed cycles, for developers debugging
 
 Splitting them keeps each table focused on one story for one audience. Mixing them would dilute the reasoning trail with enforcement noise and operational logs.
 
@@ -110,30 +110,49 @@ One polymorphic table. Every event inside a review cycle is a row. The `type` fi
 ```text
 audit_records
   id                INTEGER PRIMARY KEY AUTOINCREMENT
-  review_cycle_id   TEXT NOT NULL        -- e.g. "cycle_20260601_141522_a3f8b1c0"
+  cycle_id          TEXT NOT NULL        -- e.g. "cycle_20260601_141522_a3f8b1c0"
   parent_id         INTEGER              -- self-FK; NULL only for the cycle root
   category          TEXT NOT NULL        -- 'decision' | 'evidence'
   type              TEXT NOT NULL        -- concrete sub-type (taxonomy below)
   agent             TEXT                 -- which agent or harness emitted it
   content           JSON NOT NULL        -- type-shaped payload
-  emitted_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+  timestamp         DATETIME DEFAULT CURRENT_TIMESTAMP
   FOREIGN KEY (parent_id) REFERENCES audit_records(id)
   CHECK (category IN ('decision', 'evidence'))
 ```
 
 Indexes:
 
-- `UNIQUE INDEX one_start_per_cycle ON audit_records(review_cycle_id) WHERE type = 'cycle_started'` — the DB itself enforces cycle_id uniqueness.
-- `UNIQUE INDEX one_end_per_cycle ON audit_records(review_cycle_id) WHERE type = 'cycle_completed'` — and one completion per cycle.
-- `INDEX cycle_lookup ON audit_records(review_cycle_id, id)` — covers "all events for cycle X" queries.
+- `UNIQUE INDEX one_start_per_cycle ON audit_records(cycle_id) WHERE type = 'cycle_started'` — the DB itself enforces cycle_id uniqueness.
+- `UNIQUE INDEX one_end_per_cycle ON audit_records(cycle_id) WHERE type = 'cycle_completed'` — and one completion per cycle.
+- `INDEX cycle_lookup ON audit_records(cycle_id, id)` — covers "all events for cycle X" queries.
 - `INDEX parent_walk ON audit_records(parent_id)` — supports the recursive CTE.
 - `INDEX category_type ON audit_records(category, type)` — supports decision-vs-evidence filtering.
 
 ### Cycle lifecycle modeled as events
 
-There is no separate "reviews" table. A cycle exists when its `cycle_started` row exists; it is complete when a `cycle_completed` row is appended. The `cycle_completed` row's `parent_id` points back to `cycle_started`. Duration is computed at read time as `cycle_completed.emitted_at - cycle_started.emitted_at`.
+There is no separate "reviews" table. A cycle exists when its `cycle_started` row exists; it is complete when a `cycle_completed` row is appended. The `cycle_completed` row's `parent_id` points back to `cycle_started`. Duration is computed at read time as `cycle_completed.timestamp - cycle_started.timestamp`.
 
 This preserves strict append-only discipline: nothing is ever UPDATEd. A re-run is a new cycle (new `cycle_id`, new `cycle_started` row). Historic cycles are immutable. Cycle status is a query, not a state — derived from the existence of `cycle_completed`.
+
+### Canonical renderer traversal
+
+`audit_records` carries three relationships, and the renderer treats them as having different jobs. The rule below is the one canonical traversal — both the decision report and the evidence report derive from it, so readers and renderers don't have to negotiate between `parent_id`, `evidence_refs`, and `related_event_id` on the fly.
+
+**Spine (chronological by `id`).** The decision report is the rows of a cycle in ascending `id` order, filtered to `category = 'decision'`. `id` is monotonically increasing within a cycle (single-writer append), so reading by `id` reconstructs the order events were produced. No tree walk is needed for the spine.
+
+**Citations (`evidence_refs`).** Every decision row carries a `content.evidence_refs: list[int]` of `audit_records.id` values it was derived from. The renderer resolves these on demand to attach the cited observations to the decision in the evidence report. The Reasoning Harness's `decision_evidence_backed` check verifies at write time that every cited id exists in the same cycle, so dangling and foreign references never reach the renderer.
+
+**`parent_id` is scoped, on purpose.** It is used in two cases only:
+
+  1. Evidence chains within the same agent step — `observation.parent_id → tool_call.id` lets a reader see which observation came from which call without scanning by timestamp.
+  2. Cycle close — `cycle_completed.parent_id → cycle_started.id` brackets the cycle so the start/end pair is structurally linked.
+
+`parent_id` is **not** used to chain decisions to the prior decisions that motivated them; that's what `evidence_refs` is for. Mixing the two would force the renderer to decide which ancestry to trust and would conflate "produced by" with "cites as evidence."
+
+**`related_event_id`** lives on `harness_trail`, not `audit_records`. It denormalizes the audit row a harness check was about, so harness reporting doesn't need an `audit_records` join. The renderer doesn't read it for the decision or evidence reports.
+
+So: the decision report is `audit_records WHERE cycle_id = ? AND category = 'decision' ORDER BY id`. The evidence report is the same spine, with each row's `evidence_refs` resolved to the cited rows. No ad-hoc traversal, no per-row decision about which relationship to follow.
 
 ### `harness_trail` — what the harnesses verified or rejected
 
@@ -142,25 +161,25 @@ The second table records *enforcement events*: validations from the Input Harnes
 ```text
 harness_trail
   id                INTEGER PRIMARY KEY AUTOINCREMENT
-  review_cycle_id   TEXT NOT NULL
+  cycle_id          TEXT NOT NULL
   parent_id         INTEGER              -- self-FK; chains of harness checks
   related_event_id  INTEGER              -- denormalized ref to audit_records.id
   harness           TEXT NOT NULL        -- 'input' | 'action' | 'reasoning'
   type              TEXT NOT NULL
   verdict           TEXT NOT NULL        -- 'passed' | 'rejected' | 'flagged' | 'info'
   content           JSON NOT NULL
-  emitted_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+  timestamp         DATETIME DEFAULT CURRENT_TIMESTAMP
   FOREIGN KEY (parent_id) REFERENCES harness_trail(id)
 ```
 
 The architectural property worth seeing: when the Action Harness allows a tool call, the resulting tool call and observation land in `audit_records` (the substance). The harness's policy-check verdict lands in `harness_trail` (the enforcement decision). When the Action Harness *rejects* a tool call, there is no `audit_records` entry — the rejection lives only in `harness_trail`. The audit trail shows what the agent accomplished; the harness trail shows what was prevented.
 
-### `internal_ops` — operations on a completed cycle
+### `operations` — operations on a completed cycle
 
-Third table, third audience. Where `audit_records` is the deliverable and `harness_trail` is the enforcement record, `internal_ops` is for developers debugging the system — eval runs, report renders, and similar post-hoc operations land here so the main trail stays focused on the reasoning story. Same DB file; same append-only discipline.
+Third table, third audience. Where `audit_records` is the deliverable and `harness_trail` is the enforcement record, `operations` is for developers debugging the system — eval runs, report renders, and similar post-hoc operations land here so the main trail stays focused on the reasoning story. Same DB file; same append-only discipline.
 
 ```text
-internal_ops
+operations
   id                INTEGER PRIMARY KEY AUTOINCREMENT
   op_id             TEXT NOT NULL        -- e.g. "eval_20260601_142003_a3f8b1c0"
   op_type           TEXT NOT NULL        -- 'evaluation' | 'report_render' | 'evidence_render'
@@ -169,8 +188,8 @@ internal_ops
   parent_id         INTEGER              -- self-FK for multi-step ops
   type              TEXT NOT NULL        -- sub-type within the op
   content           JSON NOT NULL
-  emitted_at        DATETIME DEFAULT CURRENT_TIMESTAMP
-  FOREIGN KEY (parent_id) REFERENCES internal_ops(id)
+  timestamp         DATETIME DEFAULT CURRENT_TIMESTAMP
+  FOREIGN KEY (parent_id) REFERENCES operations(id)
 ```
 
 Each evaluation produces a small chain:

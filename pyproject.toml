@@ -35,6 +35,12 @@ dependencies = [
     # Pydantic models for review packets, findings, evaluator records.
     "pydantic>=2.0",
     "python-dotenv>=1.2.2",
+    # Agent orchestration. LangGraph builds the cycle as a state
+    # machine over our Pydantic state model; LangChain Anthropic provides
+    # the chat-model wrapper that the specialist ReAct loops use and that
+    # auto-instruments to LANGSMITH_PROJECT when the env vars are set.
+    "langgraph>=0.2.0",
+    "langchain-anthropic>=0.2.0",
 ]
 
 [dependency-groups]
@@ -43,6 +49,10 @@ dev = [
     "pytest-cov",
     "ruff",
     "mypy",
+    # LangGraph dev server + Studio entry point. `[inmem]` is the local
+    # variant — no Postgres/Redis required, runs everything in-process.
+    # Invoke as `uv run langgraph dev` from the repo root.
+    "langgraph-cli[inmem]>=0.1",
 ]
 
 [tool.ruff]

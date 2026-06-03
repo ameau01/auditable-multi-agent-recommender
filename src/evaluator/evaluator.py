@@ -1,31 +1,36 @@
-"""Evaluator class: stateful wrapper around the four-layer scorer.
+"""Scorer class: stateful wrapper around the four-layer evaluator.
 
 Loads gold answers + scoring rules + (optional) judge client once at init,
 then scores any number of predictions. Implements the gate semantics: when
 Correctness fails, Mid and Rich are reported as 'skipped' rather than 'fail'.
 
+The name is deliberately Scorer (not Evaluator) so the four-layer scoring
+class is unambiguous against the Cross-Tier Evaluator (the agent that
+synthesizes specialist findings into a Composite). One operates on a
+finished Composite to grade it; the other produces the Composite.
+
 Typical use:
 
-    from src.evaluator import Evaluator
+    from src.evaluator import Scorer
     from src.evaluator.judge_client import JudgeClient
 
-    e = Evaluator.from_eval_set_dir(
+    s = Scorer.from_eval_set_dir(
         "eval-set/",
         dataset_examples_dir="dataset-examples/",
         judge=JudgeClient(),  # None for deterministic-only scoring
     )
-    result = e.score_one("08", prediction_dict)
+    result = s.score_one("08", prediction_dict)
     # result = {"shape": TierResult, "correctness": TierResult,
     #           "mid": TierResult | "skipped",
     #           "rich": TierResult | "skipped"}
 
-    all_results = e.score_all(predictions_dict)
+    all_results = s.score_all(predictions_dict)
     # all_results = {"01": {...}, "02": {...}, ...}
 
-The Evaluator can also be built from a single rules file for ad-hoc
+The Scorer can also be built from a single rules file for ad-hoc
 scoring of one scenario:
 
-    e = Evaluator.from_single_rules_file(
+    s = Scorer.from_single_rules_file(
         "path/to/rules.json", sid="99",
         gold=gold_dict, metadata=metadata_dict, judge=None,
     )
@@ -54,10 +59,14 @@ from .rules import load_rules_file, validate_rules
 from .shape_measure import score_shape
 
 
-class Evaluator:
-    """Stateful four-layer evaluator with pre-loaded rules.
+class Scorer:
+    """Stateful four-layer scorer with pre-loaded rules.
 
     Construct via the from_* class methods, not the bare constructor.
+
+    Naming note: "Scorer" rather than "Evaluator" so this class doesn't
+    clash with the Cross-Tier Evaluator agent (which synthesizes specialist
+    findings into a Composite). They sit on opposite sides of the pipeline.
     """
 
     def __init__(self,
@@ -90,12 +99,12 @@ class Evaluator:
     def from_eval_set_dir(cls,
                           eval_set_dir: Path | str,
                           dataset_examples_dir: Path | str | None = None,
-                          judge: Any | None = None) -> "Evaluator":
+                          judge: Any | None = None) -> "Scorer":
         """Load all scenarios' composites from eval-set/expectations/NN/.
 
         Each composite (raw_recommendation.json) carries both the gold
         answer (top-level prediction fields) and the scoring rubric
-        (scoring_metadata block) in a single file. The Evaluator splits
+        (scoring_metadata block) in a single file. The Scorer splits
         them back into rules_by_sid + gold_by_sid via the composite's
         to_rules_dict()/to_gold_dict() accessors so downstream measure
         modules keep their existing key access patterns.
@@ -156,7 +165,7 @@ class Evaluator:
                                    composite_path: Path | str,
                                    sid: str | None = None,
                                    metadata: dict | None = None,
-                                   judge: Any | None = None) -> "Evaluator":
+                                   judge: Any | None = None) -> "Scorer":
         """Build an evaluator from a single raw_recommendation.json composite.
 
         Args:
@@ -185,7 +194,7 @@ class Evaluator:
                                 sid: str,
                                 gold: dict | None = None,
                                 metadata: dict | None = None,
-                                judge: Any | None = None) -> "Evaluator":
+                                judge: Any | None = None) -> "Scorer":
         """Build an evaluator that knows about exactly one scenario.
 
         Useful for ad-hoc scoring of a single new scenario without setting

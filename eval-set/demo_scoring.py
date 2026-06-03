@@ -1,8 +1,8 @@
-"""Demo: how to score a recommendation with the four-layer evaluator.
+"""Demo: how to score a recommendation with the four-layer Scorer.
 
 Uses app-08 (the cross-tier database cascade scenario) as a canonical
-example. Constructs the Evaluator, scores the gold recommendation
-against its own scoring rules, and prints the per-layer verdict.
+example. Constructs the Scorer, scores the gold recommendation against
+its own scoring rules, and prints the per-layer verdict.
 
 Default mode runs Shape + Correctness only (no API key required). Pass
 --with-judge to additionally call the LLM judge on Mid and Rich; this
@@ -30,7 +30,7 @@ PROJECT_ROOT = EVAL_SET_DIR.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.evaluator import Evaluator
+from src.evaluator import Scorer
 
 DEMO_SCENARIO = "08"  # canonical cross-tier example used across docs
 
@@ -49,7 +49,7 @@ def _verdict(layer_result) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Demo: score app-08's gold answer with the four-layer evaluator.",
+        description="Demo: score app-08's gold answer with the four-layer Scorer.",
     )
     parser.add_argument(
         "--with-judge", action="store_true",
@@ -70,16 +70,16 @@ def main():
             sys.exit(2)
         judge = JudgeClient()
 
-    evaluator = Evaluator.from_eval_set_dir(
+    scorer = Scorer.from_eval_set_dir(
         EVAL_SET_DIR,
         dataset_examples_dir=PROJECT_ROOT / "dataset-examples",
         judge=judge,
     )
-    # Use the evaluator's own loaded gold (derived from the scenario's
+    # Use the scorer's own loaded gold (derived from the scenario's
     # composite raw_recommendation.json) as the prediction-to-score, so
     # the demo reflects how a real prediction would flow through.
-    gold = evaluator.gold_for(DEMO_SCENARIO)
-    result = evaluator.score_one(DEMO_SCENARIO, gold)
+    gold = scorer.gold_for(DEMO_SCENARIO)
+    result = scorer.score_one(DEMO_SCENARIO, gold)
 
     print()
     mode = "deterministic + LLM judge" if judge else "deterministic only"

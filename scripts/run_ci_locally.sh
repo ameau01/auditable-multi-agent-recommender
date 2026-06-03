@@ -1,22 +1,24 @@
 #!/usr/bin/env bash
 # Run the same checks GitHub Actions runs, locally and in the same order.
-# This is the pre-push gate: if this script passes, the workflow_dispatch
-# CI run on GitHub will pass too.
+# Pre-push gate: if this passes, the workflow_dispatch CI run will pass.
 #
-# Mirrors .github/workflows/ci.yml exactly:
+# Steps (mirrors .github/workflows/ci.yml):
 #   1. ruff check     (linting)
 #   2. mypy src       (type checking)
-#   3. pytest -q      (full test suite, output to stdout)
+#   3. pytest -q      (full test suite)
 #
 # Stops at the first failure (set -e) so you fix one thing at a time.
-# Each step prints a clear banner so the failing step is obvious in the
-# scrollback.
 #
 # Usage:
 #   scripts/run_ci_locally.sh
 #
-# Tip: run this before every git push to GitHub. If it passes here, it
-# will pass in CI.
+# Flags:
+#   -h, --help          Show this help message and exit.
+
+if [[ "$1" == "--help" || "$1" == "-h" ]]; then
+  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
+  exit 0
+fi
 
 set -e
 cd "$(dirname "$0")/.."

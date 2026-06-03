@@ -8,7 +8,7 @@ does not use the `_helpers.py` leading-underscore prefix.
 Reserve the `_xxx.py` filename pattern for files that are MORE private
 than their neighbors (rare). For this project, locating a file under
 src/evaluator/ is sufficient signal that external callers should reach
-it through the Evaluator class or the tiers.py facade, not directly.
+it through the Scorer class or the tiers.py facade, not directly.
 """
 
 from __future__ import annotations

@@ -30,13 +30,16 @@ def cycle_with_recommendation(store: AuditStore) -> str:
 
     # cycle_started id is 1
     sup_id = store.add_event(AuditRecord(
-        review_cycle_id=cid, parent_id=1,
+        cycle_id=cid, parent_id=1,
         category="decision", type="supervisor_decision", agent="supervisor",
-        content={"decision_type": "invoke_specialist",
-                 "decision_details": {"specialists": ["compute_analyst"]}},
+        content={"decision_type": "dispatch_specialists",
+                 "targets": ["compute_analyst"],
+                 "reason": "Plan named compute_analyst.",
+                 "evidence_refs": [],
+                 "decision_details": {}},
     ))
     finding_id = store.add_event(AuditRecord(
-        review_cycle_id=cid, parent_id=sup_id,
+        cycle_id=cid, parent_id=sup_id,
         category="decision", type="specialist_finding", agent="compute_analyst",
         content={"specialist": "compute_analyst", "finding_type": "no_issue_found",
                  "headline": "Compute is healthy"},
@@ -65,7 +68,7 @@ def cycle_with_recommendation(store: AuditStore) -> str:
         },
     }
     store.add_event(AuditRecord(
-        review_cycle_id=cid, parent_id=finding_id,
+        cycle_id=cid, parent_id=finding_id,
         category="decision", type="recommendation", agent="supervisor",
         content={"composite": composite_data, "evidence_refs": []},
     ))

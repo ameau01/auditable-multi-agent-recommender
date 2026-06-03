@@ -16,24 +16,20 @@ See `docs/audit-trail.md` for the full design.
 
 from __future__ import annotations
 
-import os
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, event, insert, select
 from sqlalchemy.engine import Engine
 from sqlalchemy.pool import StaticPool
 
+from ..common.config import DEFAULT_AUDIT_DB_PATH, audit_db_path  # noqa: F401
+from ..common.init import ensure_env_loaded
 from ..models.audit import AuditRecord, HarnessRecord, InternalOpRecord
-from .schema import audit_records, harness_trail, internal_ops, metadata
+from .schema import audit_records, harness_trail, operations, metadata
 
-
-# Default path matches the .hf_cache/ pattern: hidden, project-local,
-# gitignored. Docker overrides via AUDIT_DB_PATH env.
-DEFAULT_AUDIT_DB_PATH = ".audit_db/audit.db"
 
 # Sentinel for in-memory operation. Callers (typically tests) pass this
 # to bypass all filesystem work — no dotenv lookup, no path resolution,
@@ -43,28 +39,17 @@ IN_MEMORY = ":memory:"
 
 
 def _resolve_db_path(explicit: str | None) -> Path:
-    """Resolve the audit DB path. Precedence: explicit arg, then
-    AUDIT_DB_PATH env, then the default. Relative paths are anchored to
-    the project root (the parent of the `src/` directory).
+    """Resolve the audit DB path.
 
-    When `explicit` is set, `load_dotenv()` is skipped — the caller is
-    providing the path directly, so reading the env would be wasted
-    work. This matters for tests, which create fresh stores in a loop
-    and would otherwise pay the dotenv-walk cost (a filesystem walk
-    upward from cwd) per fixture.
+    Delegates to `src.common.config.audit_db_path` which is the single
+    source of truth for path resolution (explicit > env > default).
+    When `explicit` is None, this also triggers `.env` loading once
+    so the AUDIT_DB_PATH env var is visible. Tests passing an explicit
+    path skip the env load entirely (no I/O).
     """
-    if explicit is not None:
-        raw = explicit
-    else:
-        load_dotenv()
-        raw = os.environ.get("AUDIT_DB_PATH", DEFAULT_AUDIT_DB_PATH)
-    p = Path(raw)
-    if not p.is_absolute():
-        # src/audit/store.py -> walk up two parents to find project root.
-        project_root = Path(__file__).resolve().parent.parent.parent
-        p = project_root / p
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+    if explicit is None:
+        ensure_env_loaded()
+    return audit_db_path(explicit)
 
 
 def _enable_sqlite_fks(dbapi_conn, _connection_record) -> None:
@@ -105,7 +90,7 @@ def _row_id(result) -> int:
 
 
 def _new_op_id(op_type: str) -> str:
-    """Generate an op_id for internal_ops. Same shape as cycle_id but
+    """Generate an op_id for operations. Same shape as cycle_id but
     prefixed with the op_type for at-a-glance recognition."""
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     suffix = secrets.token_hex(4)
@@ -188,7 +173,7 @@ class AuditStore:
         with self._engine.begin() as conn:
             conn.execute(
                 insert(audit_records).values(
-                    review_cycle_id=cycle_id,
+                    cycle_id=cycle_id,
                     parent_id=None,
                     category="decision",
                     type="cycle_started",
@@ -198,10 +183,24 @@ class AuditStore:
             )
         return cycle_id
 
+    def get_cycle_started_id(self, cycle_id: str) -> int | None:
+        """Return the audit_records.id of the cycle_started row for this
+        cycle, or None if the cycle doesn't exist. Used by the Supervisor
+        to cite cycle_started as evidence on its first decision (when no
+        other audit_records row exists yet)."""
+        with self._engine.connect() as conn:
+            row = conn.execute(
+                select(audit_records.c.id).where(
+                    (audit_records.c.cycle_id == cycle_id)
+                    & (audit_records.c.type == "cycle_started")
+                )
+            ).fetchone()
+        return int(row[0]) if row is not None else None
+
     def add_event(self, record: AuditRecord) -> int:
         """Append one event to audit_records. Returns the inserted row id.
 
-        The record's id and emitted_at fields are ignored (populated by
+        The record's id and timestamp fields are ignored (populated by
         SQLite); the rest of the fields are inserted as given.
 
         Raises pydantic.ValidationError if the record doesn't validate.
@@ -212,7 +211,7 @@ class AuditStore:
         with self._engine.begin() as conn:
             result = conn.execute(
                 insert(audit_records).values(
-                    review_cycle_id=record.review_cycle_id,
+                    cycle_id=record.cycle_id,
                     parent_id=record.parent_id,
                     category=record.category,
                     type=record.type,
@@ -228,7 +227,7 @@ class AuditStore:
     def add_harness_event(self, record: HarnessRecord) -> int:
         """Append one event to harness_trail. Returns the inserted row id.
 
-        Used by the three harness modules. The record's id and emitted_at
+        Used by the three harness modules. The record's id and timestamp
         fields are ignored (populated by SQLite); the rest are inserted
         as given.
 
@@ -240,7 +239,7 @@ class AuditStore:
         with self._engine.begin() as conn:
             result = conn.execute(
                 insert(harness_trail).values(
-                    review_cycle_id=record.review_cycle_id,
+                    cycle_id=record.cycle_id,
                     parent_id=record.parent_id,
                     related_event_id=record.related_event_id,
                     harness=record.harness,
@@ -256,11 +255,17 @@ class AuditStore:
         cycle_id: str,
         final_status: str = "completed",
         failure_reason: str | None = None,
+        failed_at_stage: str | None = None,
         recommendation_record_id: int | None = None,
         agent: str = "supervisor",
     ) -> int:
         """Append the cycle_completed record. parent_id is set to the
         cycle_started record's id, computed via lookup.
+
+        `failed_at_stage` is the machine-readable counterpart to the
+        prose `failure_reason` — one of the FailureStage Literal values
+        (see src/models/enums.py). Required when final_status != "completed";
+        ignored on success.
 
         Raises ValueError if no cycle_started row exists for cycle_id.
         Raises IntegrityError if cycle_completed already exists for this
@@ -269,7 +274,7 @@ class AuditStore:
         with self._engine.begin() as conn:
             row = conn.execute(
                 select(audit_records.c.id).where(
-                    (audit_records.c.review_cycle_id == cycle_id)
+                    (audit_records.c.cycle_id == cycle_id)
                     & (audit_records.c.type == "cycle_started")
                 )
             ).fetchone()
@@ -281,11 +286,12 @@ class AuditStore:
             content = {
                 "final_status": final_status,
                 "failure_reason": failure_reason,
+                "failed_at_stage": failed_at_stage,
                 "recommendation_record_id": recommendation_record_id,
             }
             result = conn.execute(
                 insert(audit_records).values(
-                    review_cycle_id=cycle_id,
+                    cycle_id=cycle_id,
                     parent_id=cycle_started_id,
                     category="decision",
                     type="cycle_completed",
@@ -296,17 +302,17 @@ class AuditStore:
             return _row_id(result)
 
     # --------------------------------------------------------
-    # Internal ops (internal_ops table)
+    # Internal ops (operations table)
     # --------------------------------------------------------
     def add_op_event(self, record: InternalOpRecord) -> int:
-        """Append one event to internal_ops. Returns the inserted row id.
+        """Append one event to operations. Returns the inserted row id.
 
         Used by callers that build their own op chains. For evaluation
         ops, prefer the higher-level evaluate_recommendation helper.
         """
         with self._engine.begin() as conn:
             result = conn.execute(
-                insert(internal_ops).values(
+                insert(operations).values(
                     op_id=record.op_id,
                     op_type=record.op_type,
                     target_cycle_id=record.target_cycle_id,
@@ -342,7 +348,7 @@ class AuditStore:
         op_id = _new_op_id("evaluation")
         with self._engine.begin() as conn:
             jc_result = conn.execute(
-                insert(internal_ops).values(
+                insert(operations).values(
                     op_id=op_id,
                     op_type="evaluation",
                     target_cycle_id=target_cycle_id,
@@ -354,7 +360,7 @@ class AuditStore:
             )
             judge_call_id = _row_id(jc_result)
             conn.execute(
-                insert(internal_ops).values(
+                insert(operations).values(
                     op_id=op_id,
                     op_type="evaluation",
                     target_cycle_id=target_cycle_id,
