@@ -94,7 +94,7 @@ The agents themselves are not yet implemented (see `README.md` and
 from real dataset content, so the diagnostic conclusions and the
 recommendations are correct for each scenario. The per-specialist
 trace details are illustrative rather than runtime-captured; once the
-agents run, those trace details come from the Persistent Action Record.
+agents run, those trace details come from the audit trail.
 
 Each trace's top-level `_what_is_real` and `_what_is_illustrative`
 blocks list exactly which fields are which.

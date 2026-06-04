@@ -40,7 +40,6 @@ Key design decisions that follow from those constraints:
 - **Multi-agent over single ReAct** One agent reasoning over all tiers at once trades depth for breadth. Bounded agents in a hierarchy keep each specialist's read surface narrow, which lets each one analyze deeper.
 - **ReAct, not zero-shot** A zero-shot specialist's audit record is "input in, output out." A ReAct specialist's record is a trace of thoughts, actions, and observations that a human can review.
 - **An MCP read surface, scoped per tier** Each specialist's telemetry access is a Model Context Protocol toolset limited to its own tier — a compute specialist cannot query database metrics. Scope is enforced at the tool surface, not by asking the agent nicely.
-- **Relational audit trail, not vector** The access patterns are foreign-key traversal and structured queries, not similarity search.
 - **Frontier model end-to-end** Specialists run ReAct loops over rich telemetry (nested distributions, time patterns, per-instance breakouts); the Evaluator synthesizes across them. Both warrant a capable model. Models are pluggable via `.env` for cost-sensitive deployments.
 - **Narrow Action Harness** The system is a recommender. Inflating the harness with execution would dilute the identity and invite a conflict of interest.
 
@@ -50,52 +49,59 @@ Full per-decision reasoning, and the alternatives rejected, lives in
 [`docs/decisions.md`](docs/decisions.md).
 
 
-## Architectural Diagram
+## System overview
 
 ```mermaid
 flowchart TB
-    subgraph Scenario ["Scenario data (pulled via MCP)"]
-        T["Terraform Definitions"]
-        M["Telemetry Timeseries<br/>(14-day window, 15-min intervals)"]
-        S["Sidecar Metadata"]
-    end
+    %% Centered main flow — the stages a cycle moves through
+    TR([Review trigger<br/><i>app-name + optional alert</i>])
+    SUP[Supervisor<br/><i>router · decides next step · decides when to complete</i>]
+    SM[System Mapper<br/><i>Terraform → tier graph</i>]
 
-    subgraph Agents ["Agentic Execution Layer"]
-        SUP["Supervisor Agent"]
-        SM["System Mapper"]
-        CA["Compute Analyst"]
-        DA["Data Layer Analyst"]
-        NA["Network Analyst"]
-        EV["Cross-Tier Evaluator"]
-    end
+    %% Three tier-bounded specialists, dispatched in parallel
+    SP_C[Compute Analyst<br/><i>ReAct · compute tier</i>]
+    SP_D[Data Layer Analyst<br/><i>ReAct · database + cache</i>]
+    SP_N[Network Analyst<br/><i>ReAct · network tier</i>]
 
-    subgraph Output ["Review Boundary"]
-        RP["Actionable Review Packet"]
-        HITL["Human-in-the-Loop (HITL)"]
-    end
+    EV[Cross-Tier Evaluator<br/><i>drift-check + synthesis</i>]
+    RP(["Review Packet<br/><i>recommendation + evidence chain</i>"])
+    H(["Human-in-the-loop (HITL)<br/><i>approve · reject · defer</i>"])
 
-    %% Execution Flow
-    TRG["Review trigger<br/>app-name + optional alert description"] --> SUP
-    SUP --> SM
-    SM --> SUP
-    SUP --> CA & DA & NA
-    CA & DA & NA -.->|pull telemetry via MCP| Scenario
-    CA & DA & NA --> EV
+    %% Main vertical sequence — middle specialist declared first as parent
+    %% of EV so dagre places EV on the centerline.
+    TR --> SUP
+    SUP --> SP_D
+    SUP --> SP_C
+    SUP --> SP_N
+    SP_D --> EV
+    SP_C --> EV
+    SP_N --> EV
     EV --> RP
-    RP --> HITL
+    RP --> H
+
+    %% Perpendicular interaction — System Mapper is a worker the Supervisor
+    %% dispatches once per cycle to map the application's tier graph.
+    SUP <-. dispatch · tier topology .-> SM
+
+    classDef center fill:#eef1ff,stroke:#4a5fff,stroke-width:1.5px,color:#111
+    classDef terminus fill:#fff,stroke:#222,stroke-width:1.5px,color:#000
+    class SUP,SP_C,SP_D,SP_N,EV,SM center
+    class TR,RP,H terminus
 ```
 
-A review begins with a trigger naming the target app — optionally with the alert's description — not a telemetry payload. Because nothing is handed in, the agents pull what they need:
+*Blue boxes are agents; oval endpoints are external boundaries (trigger in, deliverable out, human review). The four harnesses are cross-cutting concerns covered in [ARCHITECTURE.md](ARCHITECTURE.md); the data layer that specialists query is documented separately in [docs/mcp-server.md](docs/mcp-server.md).*
 
-- **Parallel, independent specialists** Three Tier Specialists run concurrently, each pulling data on demand through its own MCP read surface. They share no cross-tier visibility. This strict isolation is exactly what gives the Evaluator's subsequent drift-check its structural integrity.
-- **Three specialists, four tiers** The Data Layer Analyst handles both database and cache telemetry; compute and network each have their own specialist.
-- **One cross-tier view** The Cross-Tier Evaluator is the only agent that sees across tiers — by design, so synthesis happens in exactly one place.
+**Reading the diagram.** The vertical sequence — trigger, Supervisor, three tier-bounded Specialists in parallel, Cross-Tier Evaluator, Review Packet, Human-in-the-loop — is the conceptual flow of one review cycle. The Supervisor fans out to the three Specialists whose tiers the System Mapper detected; their findings fan back in to the Cross-Tier Evaluator for drift-check and synthesis. The fan-out / fan-in shape is the coordination story — many independent specialist agents, one synthesized conclusion. System Mapper sits perpendicular because the Supervisor dispatches it once per cycle to map the application's tier graph, then control returns to the Supervisor — it's a worker the Supervisor calls, not a stage in the pipeline.
+
+**Supervisor is the only router.** Although the diagram draws the sequence as a vertical chain, the implementation routes every transition through the Supervisor: Supervisor decides whether to call System Mapper, which specialists to dispatch, when to synthesize via the Evaluator, when to hand the synthesized recommendation onward to the Action Harness gate, and crucially — when to terminate the cycle. Every worker node returns to the Supervisor between stages; no worker can decide "we're done" on its own. The downward arrows are the conceptual sequence; the routing loop through the Supervisor is left implicit to keep the diagram readable. This is a conceptual narrative of the reasoning structure — the actual control flow and state transitions are handled by LangGraph underneath.
+
+Every arrow crosses one or more harnesses — see [ARCHITECTURE.md](ARCHITECTURE.md) for the harness layering. Note that this is a logical topology, not a microservice deployment diagram. For this portfolio implementation, the system runs as a single Python process; the architectural boundaries are strictly logical, not infrastructural.
 
 
 ## What's in the project
 
 - **6 agents.** Supervisor, System Mapper, three Tier Specialists, Cross-Tier Evaluator.
-- **4 harnesses.** Input, Reasoning, Action, Persistent Action Record.
+- **4 harnesses.** Input, Action, Reasoning, Orchestration.
 - **An MCP server exposing the read surface.** Specialists query telemetry through a Model Context Protocol tool surface — the scoped, per-tier read contract a specialist is allowed to see becomes its MCP toolset, so cross-tier access is structurally impossible. [`docs/mcp-server.md`](docs/mcp-server.md).
 - **A published Hugging Face dataset** [`ameau01/synthesized-cloud-optimization-recommendations`](https://huggingface.co/datasets/ameau01/synthesized-cloud-optimization-recommendations). 18 scenarios, each with a hand-crafted target recommendation. The system is graded against that recommendation, not against itself.
 - **A replayable audit trail** Every recommendation links back to the specific evidence that justified it.
@@ -189,118 +195,22 @@ python -m scripts.replay --scenario 8
 The dataset lives at
 [`ameau01/synthesized-cloud-optimization-recommendations`](https://huggingface.co/datasets/ameau01/synthesized-cloud-optimization-recommendations). The first run downloads it via `huggingface_hub.snapshot_download` and caches it at `<repo-root>/.hf_cache/` (about 12 MB). The cache is gitignored, lives inside the repo so the project stays self-contained, and persists across sessions. Reset with `rm -rf .hf_cache`. The default location is set by `HF_HOME=.hf_cache` in `.env.example`; copy that to `.env` and edit it (relative paths resolve against the project root, absolute paths are used as-is) if you want the cache somewhere else, including a shared system cache. (These commands target the built system; see the status note above for what is committed at this stage.)
 
-## Repo map
+## Repo orientation
 
 ```
 .
-├── README.md                          # you are here
-├── ARCHITECTURE.md                    # The diagram, the flow, the principles
-├── CHANGELOG.md                       # Phase-by-phase build log
-├── docs/
-│  ├── agents.md                       # What each of the six agents does
-│  ├── harnesses.md                    # The four cross-cutting properties
-│  ├── audit-trail.md                  # Replayability and the schema
-│  ├── eval-set.md                     # Four-layer scoring: Shape, Correctness, Mid, Rich
-│  ├── mcp-server.md                   # MCP read contract + dataset loading
-│  └── decisions.md                    # Trade-offs, alternatives, limitations
-├── src/
-│  ├── common/                         # One-stop init / config / cleanup
-│  │  ├── config.py                     #   Project paths, env-var names, table names
-│  │  ├── init.py                       #   ensure_env_loaded, get_audit_store, ensure_dataset_cached, llm_provider_status
-│  │  └── cleanup.py                    #   wipe_audit_db, wipe_hf_cache, wipe_all (used by scripts/clean.sh)
-│  ├── data_loader.py                  # Fetches dataset from Hugging Face
-│  ├── agents/                         # Multi-agent (LangGraph)
-│  │  ├── state.py                      #   CycleState: locked LangGraph state schema
-│  │  ├── analysis_plan.py              #   System Mapper output (typed)
-│  │  ├── mcp_adapter.py                #   In-process MCP tool caller (18 tools)
-│  │  ├── dispatch.py                   #   ActionHarness gate + tool_call/observation writer
-│  │  ├── system_mapper.py              #   System Mapper node (terraform + metadata → plan)
-│  │  ├── supervisor.py                 #   Supervisor node (fan-out decision)
-│  │  ├── orchestrator.py               #   LangGraph builder
-│  │  ├── runner.py                     #   run_cycle(app_name) — public entry
-│  │  ├── llm_client.py                 #   Anthropic chat wrapper (Phase 11b+)
-│  │  └── mock_llm.py                   #   Deterministic mock client for tests
-│  ├── harnesses/                      # The three harness modules (first cut)
-│  │  ├── input.py                      #   InputHarness: trigger + bundle validation
-│  │  ├── action.py                     #   ActionHarness: tool-call gate + recommendation gate (Phase 11)
-│  │  └── reasoning.py                  #   ReasoningHarness: pre-produce structured-output checks
-│  ├── models/                         # Pydantic schemas: single home for all data shapes
-│  │  ├── composite.py                  #   Composite, ScoringMetadata, TraceSection, etc.
-│  │  ├── telemetry.py                  #   MCP-server response models (all 18 tools typed)
-│  │  ├── scoring.py                    #   Scorer outputs: CheckResult, TierResult, JudgeResult, ScoreOneResult
-│  │  ├── audit.py                      #   AuditRecord + HarnessRecord + InternalOpRecord + content sub-models
-│  │  └── enums.py                      #   Cross-cutting Literals: Tier, FindingType, AgentName, RecordType, HarnessName, Verdict, ...
-│  ├── audit/                           # Audit trail persistence (SQLite via SQLAlchemy Core)
-│  │  ├── schema.py                     #   Three tables: audit_records (reasoning) + harness_trail (enforcement) + internal_ops (eval/render)
-│  │  ├── store.py                      #   AuditStore: start_cycle, add_event, add_harness_event, complete_cycle, evaluate_recommendation
-│  │  ├── queries.py                    #   Recursive CTE walks + json_each forward citations + harness lookups
-│  │  ├── composer.py                   #   compose_from_cycle(cycle_id) -> Composite
-│  │  └── inspect.py                    #   CLI: list, show, trace (no 'latest' magic; app-NN + optional cycle_id)
-│  ├── renderer/                       # Composite -> report.md + trace.json
-│  │  ├── render_report.py             #   markdown recommendation report
-│  │  ├── render_trace.py              #   audit-trail JSON
-│  │  └── __main__.py                  #   CLI: --composite PATH --out-report/--out-trace
-│  ├── mcp_server/                     # MCP read contract over the dataset
-│  │  ├── server.py                    #   FastMCP instance + tool registration
-│  │  ├── _stats.py                    #   percentile, time-pattern, breach helpers
-│  │  ├── scope.py                     #   per-specialist tool+tier allow-list
-│  │  └── tools/                       #   18 tools across 4 families
-│  ├── evaluator/                      # Pure scoring code (no data files)
-│  │  ├── enums.py                     #   Enum universes + NO_ACTION_FINDINGS sentinel
-│  │  ├── rules.py                     #   Per-scenario rubric loader + validator
-│  │  ├── shape_measure.py             #   score_shape
-│  │  ├── correctness_measure.py       #   score_correctness
-│  │  ├── mid_measure.py               #   score_mid
-│  │  ├── richness_measure.py          #   score_rich
-│  │  ├── scoring_helpers.py           #   Shared prediction_text helper
-│  │  ├── tiers.py                     #   Back-compat facade re-exporting layer funcs
-│  │  ├── evaluator.py                 #   Scorer class (stateful four-layer scoring API)
-│  │  └── eval.py                      #   CLI scorer (--app-name app-NN --prediction FILE)
-├── eval-set/                          # The benchmark (pure data + one demo)
-│  ├── expectations/                   #   18 composites (NN/raw_recommendation.json)
-│  │                                   #     each carries gold + scoring rubric in one file
-│  ├── demo_scoring.py                 #   Scores one gold (app-08); usage example
-│  └── README.md
-├── dataset-examples/                  # 3 telemetry-only scenarios (gold answers redacted)
-│  ├── scenario_02/                    #   compute / scaling_policy_change (single-tier)
-│  ├── scenario_07/                    #   cache / cache_capacity_adjustment (cross-tier)
-│  └── scenario_08/                    #   database / query_cache_optimization (cross-tier)
-├── sample_runs/                       # 3 sample full composites + rendered reports + traces
-│  ├── scenario_02/raw_recommendation.json
-│  ├── scenario_07/raw_recommendation.json
-│  ├── scenario_08/raw_recommendation.json
-│  ├── reports/                        #   markdown reports rendered from composites
-│  ├── traces/                         #   audit trails rendered from composites
-│  └── README.md
-├── tests/                             # Two categories: fast unit, slower integration
-│  ├── unit/                           #   src/ code unit tests (fast, default run)
-│  │  ├── evaluator/                   #     Per-module: shape, correctness, mid, richness, enums, rules, evaluator, tiers
-│  │  ├── audit/                       #     AuditStore + queries + composer + harness_trail layer
-│  │  ├── harnesses/                   #     InputHarness, ActionHarness, ReasoningHarness
-│  │  ├── mcp_server/                  #     scope.py allow-list + stats helpers
-│  │  └── agents/                      #     orchestrator contract
-│  ├── integration/                    #   evaluator against real data + mocks
-│  │  ├── fixtures/mock_predictions/   #     4 JSON mocks used by edge-case tests
-│  │  ├── test_eval_set_data.py        #     gold answers well-formed
-│  │  ├── test_golden_answers.py       #     every gold passes every layer
-│  │  ├── test_edge_cases.py           #     each bad mock fails expected layer
-│  │  └── test_eval_cli.py             #     CLI argparse, exit codes, end-to-end scoring
-│  └── run_all_tests.py                #   Default: unit only. --all for both.
-├── scripts/                           # Wrapper scripts for common operations
-│  ├── run_golden.sh                   #   Gold-answer validation
-│  ├── run_integration.sh              #   All integration tests
-│  ├── run_demo.sh                     #   eval-set demo
-│  ├── run_agents.sh                   #   Run one cycle of the agent system on app-NN
-│  ├── show_audit_trail.sh             #   Dump audit_records + harness_trail (no args = latest; --list shows catalog)
-│  ├── show_orchestration_trace.sh     #   Structured trace: --type decisions|evidence|both
-│  ├── clean.sh                        #   Nuke local state: --audit, --hf, or --all
-│  └── verify_trace.py                 #   Walks audit trail, confirms refs resolve
-└── notebooks/
-   ├── 01_eval_walkthrough.ipynb       # Real end-to-end eval against scenario 08
-   └── 02_agent_orchestration_preview.ipynb  # Mocked orchestration pipeline
+├── README.md, ARCHITECTURE.md, CHANGELOG.md
+├── docs/             design docs — agents, harnesses, audit-trail, eval-set, mcp-server, decisions
+├── src/              implementation — agents, harnesses, mcp_server, evaluator, audit, renderer, models, common
+├── eval-set/         18 gold answers + per-scenario scoring rubrics + demo
+├── tests/            unit (fast, default) + integration (slower)
+├── scripts/          wrapper scripts — run_agents, run_integration, clean, etc.
+├── sample_runs/      3 worked examples (composite + rendered report + trace)
+├── dataset-examples/ 3 telemetry-only scenarios (gold redacted)
+└── notebooks/        walkthrough demos
 ```
 
-The 18 scenarios are not in the repo. They are pulled at runtime from the Hugging Face dataset linked above. The local cache makes repeat runs fast.
+The 18 scenarios are not in the repo. They are pulled at runtime from the Hugging Face dataset linked above and cached locally at `.hf_cache/`.
 
 ## A note on scope
 

@@ -1,11 +1,8 @@
 # Architecture
 
-This file is the **how**. The **why** lives in the [README](README.md) under "The problem" — read that first if you have not. The three constraints the problem imposes (auditability, cross-tier causation, and zero-execution) are what every choice below answers.
+This file is the **how**. The **why** and the system overview live in the [README](README.md) — read that first if you have not. The three constraints the problem imposes (auditability, cross-tier causation, and zero-execution) are what every choice below answers.
 
-Two structural concerns sit perpendicular to each other here:
-
-**Agent topology**, who reasons about what, in what sequence.
-**Harness layering**, what structure, safety, and observability properties run across every agent.
+This file covers the four cross-cutting concerns the README diagram does not show: design principles, the four harnesses, the specialist ReAct loop, the Cross-Tier Evaluator's three-step synthesis, and which harness applies at which execution stage.
 
 - Per-agent detail lives in [docs/agents.md](docs/agents.md). 
 - Per-harness detail lives in [docs/harnesses.md](docs/harnesses.md).
@@ -23,54 +20,6 @@ Seven commitments shape every other decision.
 7. **Trade-offs are part of the deliverable** Every architectural decision has rejected alternatives. That reasoning is explicitly tracked in [docs/decisions.md](docs/decisions.md).
 
 The deeper rationale for each principle is in [docs/decisions.md](docs/decisions.md) and the sections below.
-
-## System Overview
-
-```mermaid
-flowchart TB
-    %% Centered main flow — the stages a cycle moves through
-    TR([Review trigger<br/><i>app-name + optional alert</i>])
-    SUP[Supervisor<br/><i>router · decides next step · decides when to complete</i>]
-    SM[System Mapper<br/><i>Terraform → tier graph</i>]
-
-    %% Three tier-bounded specialists, dispatched in parallel
-    SP_C[Compute Analyst<br/><i>ReAct · compute tier</i>]
-    SP_D[Data Layer Analyst<br/><i>ReAct · database + cache</i>]
-    SP_N[Network Analyst<br/><i>ReAct · network tier</i>]
-
-    EV[Cross-Tier Evaluator<br/><i>drift-check + synthesis</i>]
-    RP(["Review Packet<br/><i>recommendation + evidence chain</i>"])
-    H(["Human-in-the-loop (HITL)<br/><i>approve · reject · defer</i>"])
-
-    %% Main vertical sequence — middle specialist declared first as parent
-    %% of EV so dagre places EV on the centerline.
-    TR --> SUP
-    SUP --> SP_D
-    SUP --> SP_C
-    SUP --> SP_N
-    SP_D --> EV
-    SP_C --> EV
-    SP_N --> EV
-    EV --> RP
-    RP --> H
-
-    %% Perpendicular interaction — System Mapper is a worker the Supervisor
-    %% dispatches once per cycle to map the application's tier graph.
-    SUP <-. dispatch · tier topology .-> SM
-
-    classDef center fill:#eef1ff,stroke:#4a5fff,stroke-width:1.5px,color:#111
-    classDef terminus fill:#fff,stroke:#222,stroke-width:1.5px,color:#000
-    class SUP,SP_C,SP_D,SP_N,EV,SM center
-    class TR,RP,H terminus
-```
-
-*Blue boxes are agents; oval endpoints are external boundaries (trigger in, deliverable out, human review). The four harnesses are cross-cutting concerns covered by the next section; the data layer that specialists query is documented separately in [docs/mcp-server.md](docs/mcp-server.md).*
-
-**Reading the diagram.** The vertical sequence — trigger, Supervisor, three tier-bounded Specialists in parallel, Cross-Tier Evaluator, Review Packet, Human-in-the-loop — is the conceptual flow of one review cycle. The Supervisor fans out to the three Specialists whose tiers the System Mapper detected; their findings fan back in to the Cross-Tier Evaluator for drift-check and synthesis. The fan-out / fan-in shape is the coordination story — many independent specialist agents, one synthesized conclusion. System Mapper sits perpendicular because the Supervisor dispatches it once per cycle to map the application's tier graph, then control returns to the Supervisor — it's a worker the Supervisor calls, not a stage in the pipeline.
-
-**Supervisor is the only router.** Although the diagram draws the sequence as a vertical chain, the implementation routes every transition through the Supervisor: Supervisor decides whether to call System Mapper, which specialists to dispatch, when to synthesize via the Evaluator, when to hand the synthesized recommendation onward to the Action Harness gate (see the next section), and crucially — when to terminate the cycle. Every worker node returns to the Supervisor between stages; no worker can decide "we're done" on its own. The downward arrows are the conceptual sequence; the routing loop through the Supervisor is left implicit to keep the diagram readable. This is a conceptual narrative of the reasoning structure — the actual control flow and state transitions are handled by LangGraph underneath.
-
-Every arrow crosses one or more harnesses — the next section describes them. Note that this is a logical topology, not a microservice deployment diagram. For this portfolio implementation, the system runs as a single Python process; the architectural boundaries are strictly logical, not infrastructural.
 
 ## The Four Harnesses
 

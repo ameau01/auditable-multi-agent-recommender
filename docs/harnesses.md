@@ -253,7 +253,7 @@ The audit trail spans two append-only tables in one SQLite file: `audit_records`
 
 Treating the audit trail as its own architectural component, rather than logging bolted onto each agent, reflects how production systems are actually built. The audit trail is the artifact a compliance or optimization reviewer engages with. It deserves its own schema, its own write discipline, and its own correctness story.
 
-It is also the artifact that turns "I built an agent system" into "I built an agent system that could pass a optimization review." The other three harnesses depend on this one for accountability, they enforce structure and quality, but the audit trail is what makes the enforcement verifiable after the fact.
+It is also the artifact that turns "I built an agent system" into "I built an agent system that could pass a optimization review." The four harnesses depend on this one for accountability — they enforce structure and quality, but the audit trail is what makes the enforcement verifiable after the fact.
 
 ### What it does not do
 
