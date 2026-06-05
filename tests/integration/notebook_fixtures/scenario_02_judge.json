@@ -1,0 +1,77 @@
+{
+  "scenario_id": "02",
+  "captured_at": "2026-06-05T08:33:47+00:00",
+  "judge_provider": "anthropic",
+  "judge_model": "claude-haiku-4-5-20251001",
+  "elapsed_seconds": 8.46,
+  "shape_passed": true,
+  "correctness_passed": true,
+  "mid": {
+    "status": "scored",
+    "passed": true,
+    "checks": [
+      {
+        "name": "judge_richness",
+        "passed": true,
+        "message": "judge score 100 >= 30 (Mid threshold)",
+        "detail": {
+          "score": 100,
+          "threshold": 30,
+          "rationale": "The prediction's `specific_change` prose is substantively identical to the gold answer. Both texts present the same two auto-scaling mechanisms with identical specifics: the same instance class (m5.large), the same baseline of 3 instances during off-peak hours, the same scale-up to 6 instances at 09:00 UTC on weekdays, the same burst to 9 instances during spike windows (09:45\u201311:15 UTC and 14:45\u201316:15 UTC), the same CPU targets (50% for scheduled scaling, 60\u201365% for target-tracking), the same min/max bounds (3/9), the same pre-warming timing (15 minutes before spikes at 09:30 and 14:30 UTC), and the same projected cost reduction (~50%). The prediction also preserves the gold's pedagogical structure, offering two equally defensible approaches and emphasizing that the baseline of 3 instances is the \"load-bearing element\" of cost savings. There are no omissions, no vague phrasing, no wrong magnitudes, and no semantic drift. The prose demonstrates complete engagement with the evidence and delivers the same depth of recommendation as the gold."
+        }
+      }
+    ]
+  },
+  "rich": {
+    "status": "scored",
+    "passed": true,
+    "checks": [
+      {
+        "name": "judge_richness",
+        "passed": true,
+        "message": "judge score 100 >= 60 (Rich threshold)",
+        "detail": {
+          "score": 100,
+          "threshold": 60,
+          "rationale": "The prediction's `specific_change` prose is substantively identical to the gold answer. Both texts present the same two auto-scaling mechanisms with identical specifics: the same instance class (m5.large), the same baseline of 3 instances during off-peak hours, the same scale-up to 6 instances at 09:00 UTC on weekdays, the same burst to 9 instances during spike windows (09:45\u201311:15 UTC and 14:45\u201316:15 UTC), the same CPU targets (50% for scheduled scaling, 60\u201365% for target-tracking), the same min/max bounds (3/9), the same pre-warming timing (15 minutes before spikes at 09:30 and 14:30 UTC), and the same projected cost reduction (~50%). The prediction also preserves the gold's pedagogical structure, offering two equally defensible approaches and emphasizing that the baseline of 3 instances is the \"load-bearing element\" of cost savings. There are no omissions, no vague phrasing, no wrong magnitudes, and no semantic drift. The prose demonstrates complete engagement with the evidence and delivers the same depth of recommendation as the gold."
+        }
+      },
+      {
+        "name": "cost_impact_quantified",
+        "passed": true,
+        "message": "cost_impact has numeric fields: True",
+        "detail": {
+          "cost_impact": {
+            "current_monthly_usd": 5200.0,
+            "projected_monthly_usd": 2704.0,
+            "savings_monthly_usd": 2496.0,
+            "savings_pct": 48.0,
+            "notes": "Current: 6 \u00d7 m5.large \u00d7 730 hrs = $5,200/mo. Projected weighted average: off-peak (weekday nights 11h \u00d7 22d + weekends 48h \u00d7 4.3w \u2248 449 hrs) at 3 instances, weekday daytime non-spike (~7.5h \u00d7 22d = 165 hrs) at 6 instances, spike windows (~2.5h \u00d7 22d = 55 hrs) at 9 instances. Blended ~3.7 avg instances \u00d7 $0.096/hr \u00d7 730 \u2248 $2,704/mo, saving ~$2,496/mo (48%)."
+          }
+        }
+      },
+      {
+        "name": "projected_state_quantified",
+        "passed": true,
+        "message": "projected_state has numeric fields: True",
+        "detail": {
+          "projected_state": {
+            "cpu_p95_pct_estimate": "55-65%",
+            "memory_p95_pct_estimate": "45-55%",
+            "latency_p95_ms_estimate": "200-280",
+            "sla_availability_preserved": true,
+            "notes": "During spike windows, 9 instances provide 50% more capacity than the current 6, bringing peak CPU from ~96% down to ~60-65%. Off-peak with 3 instances, baseline CPU ~34% \u00d7 2 = ~58-68% which remains safe given low off-peak variance."
+          }
+        }
+      },
+      {
+        "name": "evidence_structured",
+        "passed": true,
+        "message": "evidence bullets total: 9 (need >=3)",
+        "detail": {
+          "bullets": 9
+        }
+      }
+    ]
+  }
+}

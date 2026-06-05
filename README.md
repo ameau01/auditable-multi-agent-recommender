@@ -7,17 +7,7 @@
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-![Status](https://img.shields.io/badge/Status-In%20Active%20Development-yellow)
-**v1.0.0**
-- Design documentation with dataset examples included.
-- (architecture, agents, harnesses, MCP contract, audit trail, evaluation, decisions). 
-- MCP Server with Pydantic model added.
-- EvalSet with golden answers and evaluator code included.
-- Agent orchestration fully implemented with LangSmith Studio support.
-- Sample, fully-traceable reports included.
-- Benchmark measurements with various LLM models 
-
-**Trust the recommendation because you can trace it, not because you trust the model.**
+> **Trust the recommendation because you can trace it, not because you trust the model.**
 
 This is a multi-agent system that analyzes cloud telemetry and recommends infrastructure optimizations with structurally auditable reasoning. Three specialist agents independently analyze compute, database, and network. A cross-tier evaluator then reconciles their findings, drift-checks each one, and weighs the cost, performance, and reliability trade-offs — keeping the three separate rather than collapsing them into a single number.
 
@@ -236,6 +226,18 @@ The dataset is 18 scenarios. Telemetry is synthesized, not observed. Before/afte
 These are deliberate choices, not gaps. Ground truth requires synthetic data — every scenario has a known correct recommendation, which real telemetry would not. A portfolio project that needs a cloud bill to demo is the wrong shape.
 
 The trade-offs are written down honestly in [`docs/decisions.md`](docs/decisions.md) (the "Limitations" half of that doc). A reviewer who wants to know what a production extension would add — real telemetry, closed-loop feedback, multi-application reasoning — will find it there.
+
+## Project status
+
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/ameau01/multi-agent-cloud-optimization-recommender/releases)
+[![Status: Released](https://img.shields.io/badge/status-released-brightgreen)](https://github.com/ameau01/multi-agent-cloud-optimization-recommender/releases)
+- Design documentation: architecture, agents, harnesses, MCP contract, audit trail, evaluation, decisions — with dataset examples.
+- MCP Server with Pydantic models.
+- Eval-set: 18 gold answers + the four-layer scorer (Shape / Correctness / Mid / Rich).
+- Agent orchestration fully implemented, with LangGraph Studio support.
+- Sample, fully-traceable reports for three scenarios in [`sample_runs/`](sample_runs/).
+- Baseline measurements across multiple model tiers in [`measurements/`](measurements/).
+- Demo Jupyter notebooks added in [`notebooks/`](notebooks/).
 
 ## License
 

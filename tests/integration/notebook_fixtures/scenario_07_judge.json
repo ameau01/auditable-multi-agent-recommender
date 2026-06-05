@@ -1,0 +1,77 @@
+{
+  "scenario_id": "07",
+  "captured_at": "2026-06-05T08:33:50+00:00",
+  "judge_provider": "anthropic",
+  "judge_model": "claude-haiku-4-5-20251001",
+  "elapsed_seconds": 2.64,
+  "shape_passed": true,
+  "correctness_passed": true,
+  "mid": {
+    "status": "scored",
+    "passed": true,
+    "checks": [
+      {
+        "name": "judge_richness",
+        "passed": true,
+        "message": "judge score 100 >= 30 (Mid threshold)",
+        "detail": {
+          "score": 100,
+          "threshold": 30,
+          "rationale": "The prediction's `specific_change` prose is substantively identical to the gold answer. Both specify the exact same concrete entities and magnitudes: scaling from 3 to 6 cache.r6g.large nodes, the current memory pressure range (88\u201395%), the three specific key patterns with their exact miss rates (rec:user:* at 27%, rec:trending:* at 30%, rec:similar:* at 38%), the redesign strategy with the sharded prefix example (rec:u:{shard}:{user_id}), the cost doubling from $700 to ~$1,400/month, and the projected outcomes (hit ratio above 0.89, db_query_p95 drop of ~38%, P95 latency under 300ms SLA). The prediction demonstrates the same evidence-bound reasoning, names the same concrete entities, specifies the same magnitudes, and avoids generic phrasing. The text is word-for-word identical, which represents perfect substantive equivalence."
+        }
+      }
+    ]
+  },
+  "rich": {
+    "status": "scored",
+    "passed": true,
+    "checks": [
+      {
+        "name": "judge_richness",
+        "passed": true,
+        "message": "judge score 100 >= 60 (Rich threshold)",
+        "detail": {
+          "score": 100,
+          "threshold": 60,
+          "rationale": "The prediction's `specific_change` prose is substantively identical to the gold answer. Both specify the exact same concrete entities and magnitudes: scaling from 3 to 6 cache.r6g.large nodes, the current memory pressure range (88\u201395%), the three specific key patterns with their exact miss rates (rec:user:* at 27%, rec:trending:* at 30%, rec:similar:* at 38%), the redesign strategy with the sharded prefix example (rec:u:{shard}:{user_id}), the cost doubling from $700 to ~$1,400/month, and the projected outcomes (hit ratio above 0.89, db_query_p95 drop of ~38%, P95 latency under 300ms SLA). The prediction demonstrates the same evidence-bound reasoning, names the same concrete entities, specifies the same magnitudes, and avoids generic phrasing. The text is word-for-word identical, which represents perfect substantive equivalence."
+        }
+      },
+      {
+        "name": "cost_impact_quantified",
+        "passed": true,
+        "message": "cost_impact has numeric fields: True",
+        "detail": {
+          "cost_impact": {
+            "current_monthly_usd": 5800.0,
+            "projected_monthly_usd": 6500.0,
+            "savings_monthly_usd": -700.0,
+            "savings_pct": -12.07,
+            "notes": "Cache tier doubles from $700 to ~$1,400/month (3\u21926 cache.r6g.large nodes). Total rises from $5,800 to ~$6,500. This is a cost increase, not a saving, but it resolves an active SLA breach (P95 at 458ms vs 300ms target). Without the fix, SLA penalties and downstream scaling of DB/compute would cost significantly more. Compute ($3,200) and database ($1,900) tiers remain unchanged."
+          }
+        }
+      },
+      {
+        "name": "projected_state_quantified",
+        "passed": true,
+        "message": "projected_state has numeric fields: True",
+        "detail": {
+          "projected_state": {
+            "cpu_p95_pct_estimate": "58-65",
+            "memory_p95_pct_estimate": "62-70",
+            "latency_p95_ms_estimate": "200-260",
+            "sla_availability_preserved": true,
+            "notes": "Based on before/after evidence: cache_hit_ratio expected to rise from 0.65\u21920.91, db_query_p95 to drop ~38%, app P95 to return to 200\u2013260ms band. Compute and DB tiers remain unchanged and within healthy headroom."
+          }
+        }
+      },
+      {
+        "name": "evidence_structured",
+        "passed": true,
+        "message": "evidence bullets total: 12 (need >=3)",
+        "detail": {
+          "bullets": 12
+        }
+      }
+    ]
+  }
+}

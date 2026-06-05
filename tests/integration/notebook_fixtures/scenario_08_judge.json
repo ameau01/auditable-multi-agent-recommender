@@ -1,0 +1,83 @@
+{
+  "scenario_id": "08",
+  "captured_at": "2026-06-05T08:33:56+00:00",
+  "judge_provider": "anthropic",
+  "judge_model": "claude-haiku-4-5-20251001",
+  "elapsed_seconds": 6.86,
+  "shape_passed": true,
+  "correctness_passed": true,
+  "mid": {
+    "status": "scored",
+    "passed": true,
+    "checks": [
+      {
+        "name": "judge_richness",
+        "passed": true,
+        "message": "judge score 100 >= 30 (Mid threshold)",
+        "detail": {
+          "score": 100,
+          "threshold": 30,
+          "rationale": "The prediction's `specific_change` prose is substantively identical to the gold answer. Both texts specify the exact same six index optimizations with identical table names, column compositions, and performance metrics (e.g., \"composite index (user_id, id) on carts\" for the carts-by-user query at p95 820ms with 6.05M calls). Both recommend provisioning \"2 read replicas (db.r6g.xlarge)\" with R/W splitting to route SELECT traffic to replicas. Both explicitly state \"Do NOT scale compute \u2014 the ASG at 8\u00d7 m5.large is correctly sized,\" demonstrating the same level of specificity and the same deliberate rejection of an alternative action. The prediction demonstrates complete engagement with the evidence-bound reasoning of the gold: it names all concrete entities (specific tables, column names, instance classes), specifies exact magnitudes (2 replicas, 8\u00d7 m5.large), and avoids generic phrasing. The texts are word-for-word equivalent, which represents the highest level of substantive equivalence."
+        }
+      }
+    ]
+  },
+  "rich": {
+    "status": "scored",
+    "passed": true,
+    "checks": [
+      {
+        "name": "judge_richness",
+        "passed": true,
+        "message": "judge score 100 >= 60 (Rich threshold)",
+        "detail": {
+          "score": 100,
+          "threshold": 60,
+          "rationale": "The prediction's `specific_change` prose is substantively identical to the gold answer. Both texts specify the exact same six index optimizations with identical table names, column compositions, and performance metrics (e.g., \"composite index (user_id, id) on carts\" for the carts-by-user query at p95 820ms with 6.05M calls). Both recommend provisioning \"2 read replicas (db.r6g.xlarge)\" with R/W splitting to route SELECT traffic to replicas. Both explicitly state \"Do NOT scale compute \u2014 the ASG at 8\u00d7 m5.large is correctly sized,\" demonstrating the same level of specificity and the same deliberate rejection of an alternative action. The prediction demonstrates complete engagement with the evidence-bound reasoning of the gold: it names all concrete entities (specific tables, column names, instance classes), specifies exact magnitudes (2 replicas, 8\u00d7 m5.large), and avoids generic phrasing. The texts are word-for-word equivalent, which represents the highest level of substantive equivalence."
+        }
+      },
+      {
+        "name": "fixture_citation",
+        "passed": true,
+        "message": "skipped, top_queries is empty in metadata",
+        "detail": {}
+      },
+      {
+        "name": "cost_impact_quantified",
+        "passed": true,
+        "message": "cost_impact has numeric fields: True",
+        "detail": {
+          "cost_impact": {
+            "current_monthly_usd": 6400.0,
+            "projected_monthly_usd": 8800.0,
+            "savings_monthly_usd": -2400.0,
+            "savings_pct": -37.5,
+            "notes": "Adding 2 read replicas at db.r6g.xlarge adds ~$2,400/mo ($1,200/mo each based on current $2,200/mo for primary+1 replica \u2192 ~$1,100-1,200 per replica). This is a cost increase, not a savings, but it resolves an active SLA breach on a tier-1 checkout service. The alternative \u2014 continued SLA violations at 660ms p95 vs 300ms target \u2014 carries far greater business risk. Once queries are optimized and load stabilizes, evaluate downsizing to db.r6g.large replicas to recover ~$800/mo."
+          }
+        }
+      },
+      {
+        "name": "projected_state_quantified",
+        "passed": true,
+        "message": "projected_state has numeric fields: True",
+        "detail": {
+          "projected_state": {
+            "cpu_p95_pct_estimate": "68-72",
+            "memory_p95_pct_estimate": "50-65",
+            "latency_p95_ms_estimate": "180-240",
+            "sla_availability_preserved": true,
+            "notes": "Based on before/after evidence: query optimization + 2 replicas with R/W splitting reduced db_query_p95 from 450-820ms to <220ms and app_p95 from 580-720ms to 180-240ms, well within the 300ms SLA."
+          }
+        }
+      },
+      {
+        "name": "evidence_structured",
+        "passed": true,
+        "message": "evidence bullets total: 11 (need >=3)",
+        "detail": {
+          "bullets": 11
+        }
+      }
+    ]
+  }
+}
