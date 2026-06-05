@@ -9,11 +9,13 @@
 
 ![Status](https://img.shields.io/badge/Status-In%20Active%20Development-yellow)
 **v1.0.0**
-- Design documentation complete (architecture, agents, harnesses, MCP contract, audit trail, evaluation, decisions). 
+- Design documentation with dataset examples included.
+- (architecture, agents, harnesses, MCP contract, audit trail, evaluation, decisions). 
 - MCP Server with Pydantic model added.
-- EvalSet with golden answers and evaluator code complete.
-- Agent orchestration fully implemented with langgraph studio support.
-
+- EvalSet with golden answers and evaluator code included.
+- Agent orchestration fully implemented with LangSmith Studio support.
+- Sample, fully-traceable reports included.
+- Benchmark measurements with various LLM models 
 
 **Trust the recommendation because you can trace it, not because you trust the model.**
 
