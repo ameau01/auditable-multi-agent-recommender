@@ -65,6 +65,15 @@ echo "================================================================"
 # ----------------------------------------------------------------------
 echo
 echo "--- Stage 1: run the agent pipeline (live LLM) ---"
+echo "    Heads-up: this is the slow stage. One cycle = System Mapper +"
+echo "    Compute / Data-Layer / Network specialists + Cross-Tier Evaluator,"
+echo "    each making real LLM calls. Typical wall time:"
+echo "      Haiku  specialists + Haiku  evaluator : ~3-5 min"
+echo "      Sonnet specialists + Sonnet evaluator : ~5-8 min"
+echo "      Opus   specialists + Opus   evaluator : ~6-10 min"
+echo "    The progress line below stays put until the cycle finishes — that's"
+echo "    expected, not a hang. Ctrl-C cancels."
+echo
 ./scripts/run_agents.sh "$APP"
 
 # ----------------------------------------------------------------------

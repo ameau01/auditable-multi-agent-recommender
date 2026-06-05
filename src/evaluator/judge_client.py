@@ -139,15 +139,16 @@ class JudgeClient:
                            or os.environ.get("LLM_JUDGE_MODEL")
                            or DEFAULT_ANTHROPIC_MODEL)
         elif self._provider == "openai":
-            self._api_key = os.environ.get("OPENAI_API_KEY")
-            if not self._api_key:
-                raise RuntimeError(
-                    "Provider 'openai' requested but OPENAI_API_KEY is "
-                    "not set. Add it to .env or set LLM_JUDGE_PROVIDER=anthropic."
-                )
-            self._model = (model
-                           or os.environ.get("LLM_JUDGE_MODEL")
-                           or DEFAULT_OPENAI_MODEL)
+            # OpenAI is currently disabled. The `_call_openai` path below
+            # stays as a stub for a future re-introduction, but the
+            # constructor refuses to wire it up until that lands with
+            # its own test coverage. See docs/decisions.md.
+            raise ValueError(
+                "OpenAI judge provider is currently disabled. Set "
+                "LLM_JUDGE_PROVIDER=anthropic in your .env. (OpenAI was "
+                "disabled after GPT-5-family API behavior changes proved "
+                "hard to track without dedicated test coverage.)"
+            )
         else:
             raise ValueError(
                 f"Unknown LLM judge provider {self._provider!r}. "

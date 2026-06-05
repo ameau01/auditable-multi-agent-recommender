@@ -9,10 +9,10 @@ Clone the repo. Run one command. Read a real-looking recommendation report.
 ```bash
 git clone <this repo>
 cd agent-orchestration
-docker compose up demo
+docker compose up --build demo
 ```
 
-The container builds the image (cold build: a few minutes), replays a vendored audit-cycle fixture for `app-08`, and writes three files to `./demo-output/`:
+The container builds the image (cold build: a few minutes), replays a vendored audit-cycle fixture for `app-08`, and writes three files to `./demo-output/`. The `--build` flag is defensive — it picks up any source/dep changes since the last run and is a near-instant cache hit when nothing changed.
 
 | File | What it is |
 | :--- | :--- |
@@ -40,9 +40,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # 2. Sync the project
 uv sync
 
-# 3. Create .env with at least one LLM API key
+# 3. Create .env with the LLM API key
 cp .env.example .env
-$EDITOR .env   # set ANTHROPIC_API_KEY or OPENAI_API_KEY (or both)
+$EDITOR .env   # set ANTHROPIC_API_KEY (the only currently supported provider; see docs/decisions.md)
 ```
 
 ### Running
@@ -101,7 +101,7 @@ The local server reads [`langgraph.json`](../langgraph.json) and exposes **two g
 
 | Graph in Studio   | What it runs                                            | Needs API key? |
 | :---------------- | :------------------------------------------------------ | :------------- |
-| `agent`           | Live multi-agent cycle — real LLM calls end-to-end      | Yes — `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `.env` |
+| `agent`           | Live multi-agent cycle — real LLM calls end-to-end      | Yes — `ANTHROPIC_API_KEY` in `.env` |
 | `agent_replay`    | Replays a vendored cycle fixture deterministically — no LLM, no network | No |
 
 Pick `agent_replay` for a zero-cost walk-through against the bundled `app-08` fixture; pick `agent` to drive a fresh cycle.

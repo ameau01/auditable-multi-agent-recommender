@@ -180,19 +180,21 @@ Three paths. Full details in [`docs/running.md`](docs/running.md).
 Needs: Docker.
 
 ```bash
-docker compose up demo
+docker compose up --build demo
 open ./demo-output/report.md
 ```
 
-Replays a vendored app-08 cycle (no LLM, no API key, no network). The rendered report carries a MOCK MODE banner.
+Replays a vendored app-08 cycle (no LLM, no API key, no network). The rendered report carries a MOCK MODE banner. `--build` is defensive: it picks up any source/dep changes since your last run, and is a near-instant cache hit when nothing changed.
 
 ### Path B — Docker, live LLM
 
-Needs: Docker, internet (LLM API + first-run Hugging Face dataset fetch ~12 MB), API key in `.env`.
+Needs: Docker, internet (LLM API + first-run Hugging Face dataset fetch ~12 MB), `ANTHROPIC_API_KEY` in `.env`.
 
 ```bash
-cp .env.example .env && $EDITOR .env    # add ANTHROPIC_API_KEY or OPENAI_API_KEY
-docker compose up live-llm              # runs app-08 by default; ~5-10 min depending on model tier, ~$0.10
+cp .env.example .env && $EDITOR .env    # add ANTHROPIC_API_KEY
+docker compose up --build live-llm      # runs app-08 by default
+                                        # first run ~12-15 min including image build
+                                        # subsequent runs ~5-10 min, ~$0.10
 open ./demo-output/report.md
 ```
 

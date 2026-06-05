@@ -79,25 +79,23 @@ The four layers split into two modes (see [`docs/eval-set.md`](../docs/eval-set.
   structural checks pass (fixture_citation, cost_impact_quantified,
   projected_state_quantified, evidence_structured).
 
-The judge supports either OpenAI or Anthropic:
+The judge runs against Anthropic (the only currently supported
+provider — see [`../docs/decisions.md`](../docs/decisions.md)):
 
-- Set `OPENAI_API_KEY` in `.env` for OpenAI (default model `gpt-4o-mini`).
-- Set `ANTHROPIC_API_KEY` in `.env` for Anthropic (default model
+- Set `ANTHROPIC_API_KEY` in `.env` (default model
   `claude-haiku-4-5-20251001`).
-- `LLM_JUDGE_PROVIDER` (`openai` or `anthropic`) picks the provider
-  explicitly when both keys are set; otherwise the provider is
-  auto-detected and prefers OpenAI.
-- `LLM_JUDGE_MODEL` overrides the default model for the chosen provider.
+- `LLM_JUDGE_PROVIDER` must be `anthropic`.
+- `LLM_JUDGE_MODEL` overrides the default model.
 
-When neither key is set, Mid and Rich return `(skipped)` markers and
+When the key is not set, Mid and Rich return `(skipped)` markers and
 the report-format contract holds. The CLI and the demo both honor this
 graceful-degradation path.
 
 **Calibration caveat.** The default thresholds (Mid >= 30, Rich >= 60)
-were originally calibrated against Anthropic Haiku and verified against
-OpenAI gpt-4o-mini. Switching providers or models may shift borderline
-verdicts; re-run `tests/judge_live/` after any change to confirm
-gold-vs-gold self-validation still clears the high-richness band.
+were calibrated against `claude-haiku-4-5-20251001`. Switching models
+may shift borderline verdicts; re-run `tests/judge_live/` after any
+change to confirm gold-vs-gold self-validation still clears the
+high-richness band.
 
 ## Four ways to use this folder
 
@@ -291,7 +289,7 @@ three ways:
     locally but not yet on Hugging Face. A short-circuit rule bypasses
     Mid + Rich for no-action findings.
   - **Threshold-gated Mid + Rich.** Mid and Rich are scored by a pinned
-    LLM judge (OpenAI or Anthropic) with a 30 / 60 score gate; the
+    Anthropic LLM judge with a 30 / 60 score gate; the
     earlier deterministic-placeholder fields (`action_keyword_groups`,
     `action_keyword_min_match`, `multi_tier_evidence`) have been
     removed from the rubric.

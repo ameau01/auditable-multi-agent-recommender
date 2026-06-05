@@ -82,7 +82,7 @@ The architecture limits redundant LLM spend through several patterns independent
 
 ### Provider portability
 
-While the reference implementation uses Anthropic's Claude, the architectural pattern is provider-neutral. Substituting an equivalent capability tier from OpenAI or Google is a `.env` change, not an architectural rewrite.
+The architectural pattern is provider-neutral, but within the time frame of this portfolio project only Anthropic Claude is supported.
 
 ## 6. Parallel vs. Sequential Specialists
 

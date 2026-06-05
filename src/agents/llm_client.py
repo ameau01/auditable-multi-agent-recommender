@@ -196,19 +196,29 @@ class OpenAILLMClient:
 def make_llm_client(provider: str, model: str) -> LLMClient:
     """Construct the right client for the requested provider.
 
-    Raises ValueError on an unknown provider name. Both provider
-    classes raise RuntimeError at construction if their respective
-    API key env var is missing — so any misconfiguration surfaces at
+    Anthropic is currently the only supported provider. OpenAI is
+    explicitly rejected with a clear error — the `OpenAILLMClient`
+    class below stays as a stub for a future re-introduction, but the
+    factory refuses to construct it until that re-introduction lands
+    with its own test coverage. See docs/decisions.md.
+
+    AnthropicLLMClient raises RuntimeError at construction if
+    ANTHROPIC_API_KEY is missing — so any misconfiguration surfaces at
     cycle start rather than mid-cycle on the first LLM call.
     """
     p = provider.lower()
     if p == "anthropic":
         return AnthropicLLMClient(default_model=model)
     if p == "openai":
-        return OpenAILLMClient(default_model=model)
+        raise ValueError(
+            "OpenAI provider is currently disabled. Set "
+            "SPECIALIST_PROVIDER=anthropic and EVALUATOR_PROVIDER=anthropic "
+            "in your .env. (OpenAI was disabled after GPT-5-family API "
+            "behavior changes proved hard to track without dedicated test "
+            "coverage; see docs/decisions.md.)"
+        )
     raise ValueError(
-        f"Unknown LLM provider: {provider!r}. "
-        f"Expected 'anthropic' or 'openai'."
+        f"Unknown LLM provider: {provider!r}. Expected 'anthropic'."
     )
 
 
