@@ -1,4 +1,4 @@
-# Auditable Multi-Aagent Recommender
+# Auditable Multi-Agent Recommender
 
 [![Hugging Face Dataset](https://img.shields.io/badge/Dataset-synthesized--cloud--optimization--recommendations-yellow)](https://huggingface.co/datasets/ameau01/synthesized-cloud-optimization-recommendations)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
