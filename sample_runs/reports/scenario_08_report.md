@@ -32,6 +32,7 @@ Action 2 — Add 2 read replicas (db.r6g.xlarge) and enable R/W splitting [evide
 Current topology: db.r6g.xlarge primary + 1 replica, no R/W splitting. Change to: db.r6g.xlarge primary + 3 replicas total (add 2), with R/W splitting enabled so all 6 SELECT queries route to read replicas. Cost delta: +$2,200/month (2 x db.r6g.xlarge at ~$1,100/month each). New database tier cost: $4,400/month. New total monthly cost: $8,600/month.
 
 Do NOT change compute — the ASG at 8x m5.large (min 8, max 12) with target-tracking scaling is correctly sized. CPU P95 peaks at 67–72% during business hours because threads block on slow DB responses; once DB latency drops to <220ms, CPU will fall back to the 50–55% range. Scaling or upsizing compute would not reduce DB query execution time and would waste spend.
+
 ---
 
 ## Summary

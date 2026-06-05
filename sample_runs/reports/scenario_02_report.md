@@ -31,6 +31,7 @@
    - Do NOT add database, cache, or network tiers — none exist in the infrastructure (ref 53: $0.00 for all three), and no evidence suggests they are needed.
    - Do NOT downsize to m5.medium — memory p95=63.8% (ref 45) on m5.large (8 GiB) would become ~127.6% on m5.medium (4 GiB), causing OOM failures.
    - Do NOT increase the fixed fleet count (e.g., to 9 permanently) — this would cost $7,800/mo (+$2,600/mo) instead of the ~$3,724/mo achieved by auto-scaling, wasting $4,076/mo in off-peak idle capacity.
+
 ---
 
 ## Summary

@@ -26,6 +26,7 @@
 **Do NOT change:**
 - **Compute:** The ASG at 6× m5.large (min=6, max=10, target_tracking) is correctly sized. CPU P95 at 66% during peak (evidence_ref 363) is in the healthy band. The fleet is not scaling toward max=10 because the bottleneck is cache-driven latency, not compute saturation. Scaling compute would not reduce the 6.7M cache misses or the DB overflow they cause. Current cost $3,200/month — leave unchanged. [evidence_refs 335, 363]
 - **Database:** The db.r6g.large with 2 replicas is healthy. db_cache_hit_ratio 0.93 (evidence_ref 349), I/O wait P95 6.9ms (evidence_ref 351), connection pool P95 at 85 (evidence_ref 347), no slow queries (evidence_ref 353). The 335 DB latency breaches are a downstream symptom of cache miss overflow, not a database deficiency. Adding replicas or upsizing the database would absorb overflow at higher cost without fixing the root cause. Current cost $1,900/month — leave unchanged. [evidence_refs 347, 349, 351, 353, 372]
+
 ---
 
 ## Summary
