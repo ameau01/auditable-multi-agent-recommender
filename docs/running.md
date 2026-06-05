@@ -118,7 +118,9 @@ Pick `agent_replay` for a zero-cost walk-through against the bundled `app-08` fi
 - `application_id` — the scenario, always lowercase `app-NN` (e.g. `app-02`, `app-07`, `app-08`).
 - `cycle_id` — any unique string for this run (e.g. `cycle-id-001`). The orchestrator stamps a generated id if you omit it on the `agent` graph; the `agent_replay` graph uses the value you provide to key its in-memory audit store.
 
-<!-- TODO: screenshot of LangGraph Studio with both graphs visible + the Input panel filled in -->
+Here's the graph and a finished cycle inside Studio (`agent` graph, `app-08`):
+
+[![LangGraph Studio showing the agent graph on the left — supervisor routing to system_mapper, the three tier specialists, cross_tier_evaluator, gate, and cycle_complete — and on the right the structured recommendation produced by cross_tier_evaluator: finding_type=issue_found, primary_tier=database, with reasoning, root_cause, secondary_tier, specific_change, and summary fields expanded. Click for full size.](images/langgraph-screen-lores.jpg)](images/langgraph-screen-hires.jpg)
 
 
 ## What the dataset looks like
