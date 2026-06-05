@@ -58,5 +58,7 @@ baseline-sonnet: ## Single-shot Sonnet baseline (~$0.50, ~5-8 min).
 baseline-opus: ## Single-shot Opus baseline (~$3, ~8-15 min).
 	./scripts/baseline_single_shot.sh --model opus
 
-clean: ## Remove the audit DB, demo output, and other transient files.
-	./scripts/clean.sh
+clean: ## Wipe the audit DB, the HF dataset cache, and ./demo-output/.
+	./scripts/clean.sh --all
+	rm -rf ./demo-output
+	@echo "Wiped ./demo-output/"
