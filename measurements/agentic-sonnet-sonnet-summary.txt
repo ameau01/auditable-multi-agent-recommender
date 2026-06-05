@@ -1,0 +1,54 @@
+# Baseline summary — integration-test-sonnet-sonnet
+================================================================
+
+Configuration
+-------------
+  apps       : 18
+
+Stage 1 — generation
+--------------------
+  scored apps   : 18 / 18
+  total elapsed : 0.0s  (avg 0.0s / app)
+
+Stage 2 — scoring (four layers)
+-------------------------------
+
+  layer         pass  fail   n/a  total
+  ------------ ----- ----- ----- ------
+  Shape           18     0     0     18
+  Correctness     15     3     0     18
+  Mid             15     0     3     18
+  Rich            14     1     3     18
+
+  all-four-PASS apps : 14 / 18
+
+  pass = correct verdict (explicit PASS, or correct short-circuit on
+         no-action scenarios where there's nothing to judge)
+  fail = wrong verdict (explicit FAIL)
+  n/a  = layer didn't run (Correctness gate failed, or scorer crashed)
+
+Per-app verdicts
+----------------
+
+  app       Shape  Correctness  Mid    Rich     elapsed
+  --------  -----  -----------  -----  -----   --------
+  app-01    PASS   PASS         PASS   PASS           -
+  app-02    PASS   PASS         PASS   FAIL           -
+  app-03    PASS   PASS         PASS   PASS           -
+  app-04    PASS   PASS         PASS   PASS           -
+  app-05    PASS   PASS         PASS   PASS           -
+  app-06    PASS   PASS         PASS   PASS           -
+  app-07    PASS   FAIL         n/a    n/a            -
+  app-08    PASS   PASS         PASS   PASS           -
+  app-09    PASS   PASS         PASS   PASS           -
+  app-10    PASS   PASS         PASS   PASS           -
+  app-11    PASS   PASS         PASS   PASS           -
+  app-12    PASS   FAIL         n/a    n/a            -
+  app-13    PASS   PASS         PASS   PASS           -
+  app-14    PASS   FAIL         n/a    n/a            -
+  app-15    PASS   PASS         PASS   PASS           -
+  app-16    PASS   PASS         PASS   PASS           -
+  app-17    PASS   PASS         PASS   PASS           -
+  app-18    PASS   PASS         PASS   PASS           -
+
+================================================================

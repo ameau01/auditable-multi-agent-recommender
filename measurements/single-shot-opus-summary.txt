@@ -1,0 +1,58 @@
+# Baseline summary — opus-single-shot
+================================================================
+
+Configuration
+-------------
+  model      : opus  (claude-opus-4-6)
+  provider   : anthropic
+  started_at : 20260605_004100Z
+  out_dir    : baseline-runs/opus-single-shot
+  apps       : 18
+
+Stage 1 — generation
+--------------------
+  scored apps   : 18 / 18
+  total elapsed : 507.8s  (avg 28.2s / app)
+
+Stage 2 — scoring (four layers)
+-------------------------------
+
+  layer         pass  fail   n/a  total
+  ------------ ----- ----- ----- ------
+  Shape           18     0     0     18
+  Correctness      3    15     0     18
+  Mid              1     2    15     18
+  Rich             0     3    15     18
+
+  all-four-PASS apps : 0 / 18
+
+  pass = correct verdict (explicit PASS, or correct short-circuit on
+         no-action scenarios where there's nothing to judge)
+  fail = wrong verdict (explicit FAIL)
+  n/a  = layer didn't run (Correctness gate failed, or scorer crashed)
+
+Per-app verdicts
+----------------
+
+  app       Shape  Correctness  Mid    Rich     elapsed
+  --------  -----  -----------  -----  -----   --------
+  app-01    PASS   FAIL         n/a    n/a       98.43s
+  app-02    PASS   PASS         PASS   FAIL      24.18s
+  app-03    PASS   FAIL         n/a    n/a       20.07s
+  app-04    PASS   FAIL         n/a    n/a       23.55s
+  app-05    PASS   FAIL         n/a    n/a       23.14s
+  app-06    PASS   FAIL         n/a    n/a       20.95s
+  app-07    PASS   FAIL         n/a    n/a       26.36s
+  app-08    PASS   PASS         FAIL   FAIL      27.13s
+  app-09    PASS   PASS         FAIL   FAIL      26.42s
+  app-10    PASS   FAIL         n/a    n/a       25.91s
+  app-11    PASS   FAIL         n/a    n/a       22.22s
+  app-12    PASS   FAIL         n/a    n/a       26.47s
+  app-13    PASS   FAIL         n/a    n/a       27.77s
+  app-14    PASS   FAIL         n/a    n/a       19.99s
+  app-15    PASS   FAIL         n/a    n/a       23.14s
+  app-16    PASS   FAIL         n/a    n/a       20.68s
+  app-17    PASS   FAIL         n/a    n/a       29.59s
+  app-18    PASS   FAIL         n/a    n/a       21.81s
+
+================================================================

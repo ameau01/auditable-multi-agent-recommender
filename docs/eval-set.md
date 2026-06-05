@@ -29,18 +29,7 @@ Documenting the path matters because it shows the disciplined approaches were tr
 
 ## The architectural justification
 
-The evaluator is calibrated to separate careless single-shot models from deep, orchestrated synthesis. These numbers are projections, not measurements; real baseline runs will publish in `baselines.md` once they execute. Shape and Correctness are reproducible; Mid and Rich are judge-scored and therefore judge-dependent, so their counts are expected ranges rather than exact figures.
-
-| Baseline | Shape (18) | Correctness (18) | Mid (cond.) | Rich (cond.) |
-| :--- | :--- | :--- | :--- | :--- |
-| Trivial (returns one canned answer) | 18 | 1 | 0 or 1 | 0 or 1 |
-| Random (picks allowed values randomly) | 18 | 3 to 5 | 0 to 1 | 0 to 1 |
-| Single-shot frontier LLM, no tools | 18 | 14 to 17 | 10 to 15 | **6 to 10** |
-| Orchestrated multi-agent (this project) | 18 | 18 | 18 | **18** |
-
-Mid and Rich are conditional on Correctness passing, so the denominators are the Correctness pass count for that row, not 18.
-
-A single-shot frontier model usually gets the answer right but misses on cross-tier interactions, rarely producing both specific evidence citations and quantified projections in one pass, so the judge scores its prose low and the structural checks for Rich don't run. The orchestrated architecture earns its complexity because each specialist has a narrow scope and can chase fixtures and quantification deeply inside its own tier before the Evaluator synthesizes them. **If a single-shot model ever scored full marks on Rich, the orchestration would not be defensible — the eval is built to expose exactly that.**
+The evaluator is calibrated to separate careless single-shot models from deep, orchestrated synthesis. Measured scores across six baseline runs (three single-shot, three orchestrated tiers) live in [`../measurements/`](../measurements/); the headline table is in [`../README.md`](../README.md). The gap between single-shot and orchestrated on Correctness and Rich is what justifies the architecture: single-shot LLMs at every capability tier struggle to consistently match the project's enum vocabulary and to produce rich-text recommendations the judge will pass.
 
 ## The four layers
 

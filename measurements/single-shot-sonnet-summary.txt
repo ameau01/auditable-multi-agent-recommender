@@ -1,0 +1,58 @@
+# Baseline summary — sonnet-single-shot
+================================================================
+
+Configuration
+-------------
+  model      : sonnet  (claude-sonnet-4-6)
+  provider   : anthropic
+  started_at : 20260605_005110Z
+  out_dir    : baseline-runs/sonnet-single-shot
+  apps       : 18
+
+Stage 1 — generation
+--------------------
+  scored apps   : 18 / 18
+  total elapsed : 637.4s  (avg 35.4s / app)
+
+Stage 2 — scoring (four layers)
+-------------------------------
+
+  layer         pass  fail   n/a  total
+  ------------ ----- ----- ----- ------
+  Shape           18     0     0     18
+  Correctness      4    14     0     18
+  Mid              2     2    14     18
+  Rich             0     4    14     18
+
+  all-four-PASS apps : 0 / 18
+
+  pass = correct verdict (explicit PASS, or correct short-circuit on
+         no-action scenarios where there's nothing to judge)
+  fail = wrong verdict (explicit FAIL)
+  n/a  = layer didn't run (Correctness gate failed, or scorer crashed)
+
+Per-app verdicts
+----------------
+
+  app       Shape  Correctness  Mid    Rich     elapsed
+  --------  -----  -----------  -----  -----   --------
+  app-01    PASS   FAIL         n/a    n/a       98.13s
+  app-02    PASS   PASS         FAIL   FAIL      22.97s
+  app-03    PASS   FAIL         n/a    n/a       21.55s
+  app-04    PASS   FAIL         n/a    n/a       22.09s
+  app-05    PASS   FAIL         n/a    n/a       21.54s
+  app-06    PASS   FAIL         n/a    n/a       23.86s
+  app-07    PASS   PASS         PASS   FAIL      25.19s
+  app-08    PASS   FAIL         n/a    n/a       25.49s
+  app-09    PASS   PASS         FAIL   FAIL     155.09s
+  app-10    PASS   FAIL         n/a    n/a       25.76s
+  app-11    PASS   FAIL         n/a    n/a       25.97s
+  app-12    PASS   FAIL         n/a    n/a       24.98s
+  app-13    PASS   PASS         PASS   FAIL      26.93s
+  app-14    PASS   FAIL         n/a    n/a       23.75s
+  app-15    PASS   FAIL         n/a    n/a       24.67s
+  app-16    PASS   FAIL         n/a    n/a       21.67s
+  app-17    PASS   FAIL         n/a    n/a       26.66s
+  app-18    PASS   FAIL         n/a    n/a       21.10s
+
+================================================================

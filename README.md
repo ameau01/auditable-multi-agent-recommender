@@ -107,21 +107,18 @@ Every arrow crosses one or more harnesses — see [ARCHITECTURE.md](ARCHITECTURE
 - **A replayable audit trail** Every recommendation links back to the specific evidence that justified it.
 - **A four-layer evaluator, two modes.** Shape and Correctness are deterministic rule-based gates: well-formed JSON, strict enum equality on finding_type, primary_tier, secondary_tier, action_category. Mid and Rich are scored by an auditable LLM judge against a published rubric: did the agent engage with the right evidence, did it produce orchestrated synthesis. Mid and Rich are gated on Correctness, so a wrong-answer prediction is reported as "wrong answer" rather than "right answer but thin." The judge can flag but cannot override the deterministic verdict.
 
-### Expected scores by baseline
+### Measured scores by baseline
 
-| Baseline                                | Shape (18) | Correctness (18) | Mid (cond.) | Rich (cond.) |
-|-----------------------------------------|------------|------------------|-------------|--------------|
-| Trivial (canned answer)                 | 18         | 1                | 0 or 1      | 0 or 1       |
-| Random (random allowed values)          | 18         | 3 to 5           | 0 to 1      | 0 to 1       |
-| Single-shot frontier LLM, no tools      | 18         | 14 to 17         | 10 to 15    | 6 to 10      |
-| Orchestrated multi-agent (this project) | 18         | 18               | 18          | 18           |
+| Baseline | Shape (18) | Correctness (18) | Mid | Rich |
+| :--- | :--- | :--- | :--- | :--- |
+| Single-shot Haiku, same telemetry, no structure | 12 | 4 | 1 | 0 |
+| Single-shot Sonnet | 18 | 4 | 2 | 0 |
+| Single-shot Opus | 18 | 3 | 1 | 0 |
+| Orchestrated cheap (Haiku + Sonnet) | 18 | 17 | 16 | 15 |
+| Orchestrated mid (Sonnet + Sonnet) | 18 | 15 | 15 | 14 |
+| **Orchestrated heavy (Opus + Opus)** | **18** | **18** | **18** | **18** |
 
-Numbers are projections, not measurements. Mid and Rich denominators
-are the Correctness pass count for that row, not 18. The gap between
-row three and row four is what justifies the orchestration. See
-[`docs/eval-set.md`](docs/eval-set.md) for the two-mode design
-(deterministic gates plus auditable LLM judge), the short-circuit rule
-for no-action findings, and the honest limits of each mode.
+*Real measurements (2026-06-04). Per-run summaries and methodology in [`measurements/`](measurements/). Re-runs may shift counts slightly due to LLM non-determinism.*
 
 ## Audit-trail walkthrough
 
