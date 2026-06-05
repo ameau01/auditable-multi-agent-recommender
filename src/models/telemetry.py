@@ -207,9 +207,16 @@ class CostBaseline(BaseModel):
 
 class BeforeAfterEvidence(BaseModel):
     """Mirrors metadata.before_after_evidence. All fields optional
-    because some scenarios have no prior config-change evidence."""
-    config_before: dict[str, Any] | None = None
-    config_after: dict[str, Any] | None = None
+    because some scenarios have no prior config-change evidence.
+
+    config_before / config_after accept BOTH dict and str shapes — scenario
+    metadata authored before the typed-models refactor used short string
+    summaries (e.g. 't3.large × 8 fixed, no scaling'); newer scenarios use
+    structured dicts. Both are valid prior-state evidence; rejecting the
+    string form would cause `get_before_after_evidence` to fail on every
+    pre-refactor scenario, which is most of them."""
+    config_before: dict[str, Any] | str | None = None
+    config_after: dict[str, Any] | str | None = None
     observed_outcome_summary: str | None = None
     source_attribution: str | None = None
     model_config = _PassThroughConfig

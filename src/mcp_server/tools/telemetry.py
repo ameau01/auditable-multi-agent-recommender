@@ -184,11 +184,18 @@ def get_configuration(app_name: str, tier: str) -> GetConfigurationResponse:
     """
     scenario = load_for_app(app_name)
     topology = scenario.get("metadata", {}).get("tier_topology", {})
-    if tier not in topology:
+    # Scenarios use both conventions for absent tiers: the tier key may be
+    # missing entirely, OR the key may be present with a None value (e.g.
+    # `tier_topology: {compute: {...}, database: null, cache: null}`).
+    # Both mean "this tier doesn't exist in this scenario." Reject both
+    # with the same clear ToolError so the LLM gets a consistent signal.
+    tier_config = topology.get(tier)
+    if tier_config is None:
+        present_tiers = sorted(k for k, v in topology.items() if v is not None)
         raise ToolError(
             f"unknown_tier: tier {tier!r} is not present in tier_topology "
-            f"for {app_name}. Known tiers: {sorted(topology.keys())}"
+            f"for {app_name}. Present tiers: {present_tiers}"
         )
     return GetConfigurationResponse(
-        app_name=app_name, tier=tier, configuration=topology[tier],
+        app_name=app_name, tier=tier, configuration=tier_config,
     )

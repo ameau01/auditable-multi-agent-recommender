@@ -48,7 +48,7 @@ import re
 import sys
 import time
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -85,10 +85,25 @@ def _safe_call(tool_name: str, **arguments: Any) -> dict[str, Any] | None:
 
     Returns None on failure (so the prompt-builder can omit the section
     cleanly) and prints the error to stderr for diagnostic visibility.
+
+    Suppresses the "WARN:" prefix for *expected* tool errors — specifically
+    `unknown_tier`, which is how the agent legitimately discovers "this tier
+    doesn't exist in this scenario." Single-shot has no System Mapper to
+    tell it the topology upfront, so it gropes across all four tiers and
+    expects ~3 unknown_tier responses per app. Surfacing those as WARN
+    overstated the noise; they're informational, not failures.
+
+    Unexpected errors (schema mismatches, network failures, real bugs) still
+    log as WARN — the suppression is keyword-specific.
     """
     try:
         return call_tool(tool_name, arguments)
     except Exception as exc:  # noqa: BLE001
+        msg = str(exc)
+        # Expected tool error: single-shot agent groping for absent tiers.
+        # Don't surface as WARN — it's information the agent uses, not a fault.
+        if "unknown_tier" in msg:
+            return None
         print(
             f"  WARN: {tool_name}({arguments}) failed: {exc}",
             file=sys.stderr,
@@ -373,7 +388,7 @@ def main(argv: list[str] | None = None) -> int:
     model_str = MODEL_MAP[args.model]
     apps = [a.strip() for a in args.apps.split(",") if a.strip()]
 
-    ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     out_dir = args.out_dir or PROJECT_ROOT / f"baseline-runs/{args.model}-{ts}"
     out_dir.mkdir(parents=True, exist_ok=True)
 

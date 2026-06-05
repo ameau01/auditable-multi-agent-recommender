@@ -31,8 +31,13 @@ eval: ## Score one app's gold answer with the LLM judge. Override APP=app-NN.
 	./scripts/run_demo.sh --with-judge
 
 scenario: ## Run agents + render report + score against gold for one scenario. Usage: make scenario APP=app-08
+	@# Coalesce APP across common case variants — make variables are
+	@# case-sensitive, so without this, `make scenario App=app-08`
+	@# silently fails with "APP is required."
+	$(eval APP := $(or $(APP),$(App),$(app)))
 	@if [ -z "$(APP)" ]; then \
 		echo "ERROR: APP is required. Usage: make scenario APP=app-08" >&2; \
+		echo "       (variable names are case-sensitive: APP, not App or app)" >&2; \
 		exit 2; \
 	fi
 	@mkdir -p ./demo-output
