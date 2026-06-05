@@ -192,7 +192,7 @@ Needs: Docker, internet (LLM API + first-run Hugging Face dataset fetch ~12 MB),
 
 ```bash
 cp .env.example .env && $EDITOR .env    # add ANTHROPIC_API_KEY or OPENAI_API_KEY
-docker compose up live-llm              # runs app-08 by default; ~2 min, ~$0.10
+docker compose up live-llm              # runs app-08 by default; ~5-10 min depending on model tier, ~$0.10
 open ./demo-output/report.md
 ```
 
