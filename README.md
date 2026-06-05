@@ -3,7 +3,7 @@
 [![Hugging Face Dataset](https://img.shields.io/badge/Dataset-synthesized--cloud--optimization--recommendations-yellow)](https://huggingface.co/datasets/ameau01/synthesized-cloud-optimization-recommendations)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](pyproject.toml)
-[![CI](https://github.com/ameau01/multi-agent-cloud-optimization-recommender/actions/workflows/lint-typecheck-test.yml/badge.svg)](https://github.com/ameau01/multi-agent-cloud-optimization-recommender/actions/workflows/lint-typecheck-test.yml)
+[![CI](https://github.com/ameau01/auditable-multi-agent-recommender/actions/workflows/lint-typecheck-test.yml/badge.svg)](https://github.com/ameau01/auditable-multi-agent-recommender/actions/workflows/lint-typecheck-test.yml)
 [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
@@ -228,8 +228,8 @@ The trade-offs are written down honestly in [`docs/decisions.md`](docs/decisions
 
 ## Project status
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/ameau01/multi-agent-cloud-optimization-recommender/releases)
-[![Status: Released](https://img.shields.io/badge/status-released-brightgreen)](https://github.com/ameau01/multi-agent-cloud-optimization-recommender/releases)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue)](https://github.com/ameau01/auditable-multi-agent-recommender/releases)
+[![Status: Released](https://img.shields.io/badge/status-released-brightgreen)](https://github.com/ameau01/auditable-multi-agent-recommender/releases)
 - Design documentation: architecture, agents, harnesses, MCP contract, audit trail, evaluation, decisions — with dataset examples.
 - MCP Server with Pydantic models.
 - Eval-set: 18 gold answers + the four-layer scorer (Shape / Correctness / Mid / Rich).
