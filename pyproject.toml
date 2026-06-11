@@ -9,7 +9,7 @@ packages = ["src"]
 
 [project]
 name = "auditable-multi-agent-recommender"
-version = "0.1.0"
+version = "1.0.0"
 description = "A multi-agent system that reads cloud telemetry and recommends optimization changes."
 authors = [{name = "Alexander Meau"}]
 license = {text = "MIT"}
